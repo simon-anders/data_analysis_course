@@ -1,0 +1,470 @@
+---
+title: 'SFB 1036 Course on Data Analysis: Lesson 2'
+author: "Simon Anders"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Inference the pedestrian way
+
+## Height data
+
+For today's example, we again use the NHANES data
+
+```{r}
+library( tidyverse )
+inner_join( 
+    haven::read_xpt( "NHANES/DEMO_I.XPT" ), 
+    haven::read_xpt( "NHANES/BMX_I.XPT" ), 
+    by="SEQN" ) %>%
+  select( 
+    subjectId = SEQN,
+    age = RIDAGEYR,
+    sex = RIAGENDR,
+    height = BMXHT,
+    weight = BMXWT ) %>%
+  mutate(
+    sex = fct_recode( factor(sex), male="1", female="2" )
+  ) -> 
+    nhanes
+```
+
+We want two vector with the heights of all adult men and women in the data set
+
+```{r}
+nhanes %>%
+  filter( age > 20, sex == "female", !is.na(height) ) %>%
+  pull( height ) ->
+     height_women
+
+nhanes %>%
+  filter( age > 20, sex == "male", !is.na(height) ) %>%
+  pull( height ) ->
+     height_men
+```
+
+`height_women` now is a vector with the standing height (in centimeters) of several thousand women of age at least 20.
+
+```{r}
+str( height_women )
+```
+
+R can quickly calculate the mean of these values:
+
+```{r}
+mean( height_women )
+```
+
+## Sample mean and population mean
+
+If the CDC repeated this study, measing another set of ~2500 randomly selected women, would we get the same value again? How close would we get? 
+
+Probably quite close. We can assume that this value is very close to the *population mean*, i.e., the average of the heights of *all* adult women who lived in the USA at the time of the survey.^[Strictly speaking, this is not true because the survey has deliberately oversampled certan minority populations. And if these tend to be shorter or taller than caucasian Americans, our mean would be biased. We could easily correct for the bias by downweighting the subjects from the oversampled groups, but this would needlessly complicate our discussion. Hence, let's pretend that the survey cohort is a *representative* sample of the US population.] For the following, we will assume that `{r} mean( height_women )` *is* the population mean.
+
+But what if we only had measured 20 women? Then, our estimate might quite a bit off from the population mean.
+
+This is what *statistical inference* is about, namely answering the question: To which extent can observations from a representative sample of limited size be used to *infer* something about the population as a whole?
+
+The prototypical question of statistical inference is: We wish to infer the *population mean*, i.e., the mean of the heights of *all* US women, but all we have is the mean of a representative sample of, say, 20 randomly chosen women? How close can we expect this *sample mean* to be to the ("true") population mean?
+
+## Simulating many small studies
+
+This is a question we can answer either by using clever mathematics, or by a simple "in-silico experiment": We can *simulate* that we performed the study of measuring 20 women's height, and we can repeat this simulation many time. This is because we can choose *at random* 20 values from our list of over 2,500 values, and we can do this several times, and as we have so much data, it is unlikely that we select the measurement from the same women twice. And then, we can see, how the sample mean values fluctuate around the population mean.
+
+The `sample` function takes a sample of the specified size. Here, it selects 20 values at random from the vector with all women's height measurements:
+
+```{r}
+height_women %>% sample( 20 )
+```
+
+`sample` uses R's pseudo-random number generator. If we run it again, we get different data
+
+```{r}
+height_women %>% sample( 20 )
+```
+
+Let's assume, a researcher wants to find out the average height of women in the USA by measuring 20 subjects and taking the mean. The real researcher has to go out, find 20 women and measure them; we, however, can simulate this within less than a second:
+
+```{r}
+height_women %>% sample( 20 ) %>% mean()
+```
+
+And as easily, we can simulate a second try to do the same, and will get a slightly different result
+
+```{r}
+height_women %>% sample( 20 ) %>% mean()
+```
+
+R' `replicate` function can be use to do the same thing over and over; for example, run the previous command 100 times:
+
+```{r}
+replicate( 100, 
+   height_women %>% sample( 20 ) %>% mean() )
+```
+
+... or even 10,000 times (which still takes only a few seconds). This time, we don't print these 10,000 numbers but put them into a histogram
+
+```{r}
+many_averages <- 
+  replicate( 10000, 
+     height_women %>% sample( 20 ) %>% mean() )
+
+hist( many_averages )
+```
+
+This was the old-style `hist` function from base R. If you want to use ggplot, as we did last time, you need to first change the vector into a tidyverse data table (a "tibble") with a single column (here called `avg_height`):
+
+```{r}
+tibble( 
+  avg_height = many_averages ) %>%
+ggplot + 
+  geom_histogram( aes( avg_height ) )
+```
+
+If we assume that the value `{r} mean(height_women)` is the ground truth, we can see that we can that we will typically be up to 2 cm, sometimes even up to 5 cm, off.
+
+## The sampling distribution of the mean
+
+We can calulate the mean and the standard deviation of our many averages:
+
+```{r}
+mean( many_averages )
+```
+
+```{r}
+sd(many_averages)
+```
+
+The mean over all the many averages is quite exactly the same as the mean over all the women in the study. But remember that typically, we have only one average over one sample of 20 women^[Note the singular in the word "sample": Statisticians use the term "sample" to denote the whole data set. The 20 women are "a sample of size 20" of the population of all American women, not "20 samples".], and that one can be quite off. The standard deviation we just calculated is, in principle, what is often called "standard error of the mean" (SEM). 
+
+Note how the value of the SEM feels too low to describe the variation shown by the histogram. In fact, only about 68% of all the values are less than one standard error away from the true mean:
+
+```{r}
+mean( abs( many_averages - mean(height_women) ) < sd( many_averages ) )
+```
+
+This is exactly what one should expect: The averages seem to be normally distributed, and in a normal distribution, only 68% of the data is within one standard deviations around the mean. (To fully understand this statement, we need to discuss, perhaps in the next lesson, what a *standard deviation* and a *normal distribution* really are.)
+
+A better choice might be to look at the 2.5- and 98.5-percentiles:
+
+```{r}
+quantile( many_averages, c( 0.025, 0.985 ) )
+```
+What does this mean? It means that 2.5% of all the values in `many_averages` are below `{r} quantile( many_averages, 0.025 )`. 98.5% of all the values are below `{r} quantile( many_averages, 0.985 )`, and hence 2.5% are above `{r} quantile( many_averages, 0.985 )`. So, we can give a 95%-interval: We can say that 95% of all the values in `many_averages` are between `{r} quantile( many_averages, 0.025 )` and `{r} quantile( many_averages, 0.985 )`.^[How does the `quantile` function work? Conceptually, it sorts the values and then goes doen the list until it has seen the desired percentage of the values and return the value at that place. The 50-percentile (also called the 0.5-quantile) is the value exactly in the middle: We call that quantile the *median*. Exactly half of all values are below and half are above the median.]
+So, the length of this interval, `{r} quantile( many_averages, 0.985 ) - quantile( many_averages, 0.025 )` might be a good value to describe precision of our estimate. In fact, many people make their error bars not indicate the SEM but the so-called 95% confidence interval.  
+
+## Mean, standard deviation and Student's t distribution
+
+There remains one issue: To get our histogram and to calculate the SEM or the 95% interval, we have simulated many random draws. In a real experiment, we only have one set of samples. How to proceed then? How can we get the SEM then?
+
+Before we can answer this question, we need one more ingredient.
+
+Here is a histogram of all values:
+
+```{r}
+hist( height_women )
+```
+
+Note that it also looks normally distributed. It has the same mean, but a wider standard deviation:
+
+```{r}
+sd( height_women )
+```
+
+This is expected. After all, averging over 20 women should give us a smaller standard deviation than looking at each women separately. This is the point of averaging. 
+
+How much smaller is the SD of an average over 20 samples compared to the SD of the original data
+
+```{r}
+sd( height_women ) / sd( many_averages )
+```
+
+Theory tells us that averaging over $n$ values reduces the SD by a factor of $1/\sqrt{n}$. (We will discuss where this rule comes from in one of the next lessons.) Here, $n=20$, and the value of $\sqrt{20}$ is, in fact quite close to the ratio we have just seen.
+
+```{r}
+sqrt( 20 )
+```
+
+Still: In reality, we will never have the SD calculated over all ~2,500 women, because we are only looking at 20 women. How well can the SD over the heights of these 20 womens as a  "plug in" for the true value? 
+
+Let's try out, first for one sample of 20 women
+```{r}
+height_women %>% sample( 20 ) %>% sd()
+```
+
+And now, let's do this again 10,000 times and make a histogram:
+
+```{r}
+many_sds <- replicate( 10000, 
+     height_women %>% sample( 20 ) %>% sd() )
+
+hist( many_sds )
+```
+
+The standard procedure usually employed in biology is to take the sample standard deviation (i.e., the standard deviation over the measured values), divide this by $/sqrt{n}$, the square root of the sample size, and call this the standard error of the mean. Then, one draws error bars one SEM above and below the sample average.
+
+Let's see how often the true value is within such error bars. We use this question to learn a bit more about R programming.
+
+We first set up the code for one draw 20 values:
+
+```{r}
+height_women %>% sample( 20 ) -> my_sample
+tibble(
+  mean = mean( my_sample ),
+  sd = sd( my_sample ) )
+```
+
+This code performs a draw and then calculates both the sample mean and the sample standard deviation and returns both results as a tibble (a tidyverse data table) with a single row. The purpose of this will become clear in a moment.
+
+As we want to use this code quite a few time, we define a *function*:
+
+```{r}
+do_sample <- function( n ) {
+  height_women %>% sample( n ) -> my_sample
+  tibble(
+    mean = mean( my_sample ),
+    sd = sd( my_sample ) )
+}
+```
+
+This code is not executed right away. Rather, it is stored and can be made to run by calling the function, which I have named (not very creatively) `do_sample`. When calling `do_sample`, we have to pass a number, which will be substituted for `n`, the sample size. So, what we have done so far will happen for `do_sample(20)`.
+
+Now, let's run this 10 times. The output will be a list of one-row tibbles, and the `bind_rows` fucntion, to whcih we pass this on, will bind all these single rows together to one larger table with 10 rows.
+
+```{r}
+replicate( 10, do_sample(20), simplify=FALSE ) %>% bind_rows
+```
+
+(The `simplify=FALSE` is necessary to keep `replicate` from trying to be helpful and trying itself to arrange the data into table, which it won't do properly.)
+
+Now that we have a tibble, we an use our dplyr knowledge to calculate the standard error and see whether the sample mean is within on SEM of the true mean (for which we take the mean of the whole large `height_women` vector).
+
+```{r}
+true_mean <- mean( height_women )
+
+replicate( 10, do_sample(20), simplify=FALSE ) %>% 
+  bind_rows %>%
+  mutate( sem = sd / sqrt(20) ) %>%
+  mutate( diff_to_true_mean = abs( mean - true_mean ) ) %>%
+  mutate( within_sem = diff_to_true_mean < sem )
+```
+What does `abs` do? Find out yourself by typing `?abs`. (And if you don't remember from high school what an absolute value is, ask Wikipedia.)
+
+Now, the real run, with 10,000 runs, and a `summarise` at the end:
+
+```{r}
+replicate( 10000, do_sample(20), simplify=FALSE ) %>% 
+  bind_rows %>%
+  mutate( sem = sd / sqrt(20) ) %>%
+  mutate( diff_to_true_mean = abs( mean - true_mean ) ) %>%
+  mutate( within_sem = diff_to_true_mean < sem ) %>%
+  summarise( fraction_within_sem = sum( within_sem / n() ) )
+```
+
+This still seems reasonably close to the "correct" value of 68.2%, even though our histogram above showed that the standard deviation can vary a lot. Sometimes, the SD and hence the estimated SEM is way to small, otehr times much too large, and over our 10,000 runs, this has averaged out resonably well. So, the rule of $\text{SEM} = \text{SD}/\sqrt{n}$ seems to work ok.
+
+Two things to keep in mind, though:
+- The individual SEM values vary quite a lot. That it averages out over many runs does not mean that the one specific SEM value of *your* experiment might not be way too small, and it helps little to know that, on average, there are about as many error bars (over all the thousands of published papers) that are too small as there are error bars that are way too large. In fact, there are probably more too small error bars than too large ones, because the results with too large error bars might not get published.
+- 68% is not much. With nearly a third (32%) of all estimated means escaping their error bars, the rule of thumb "If the error bars don't overlap, it's a real difference" is clearly way too optimistic. If at all, it might be acceptable only with 95% error bars.
+
+And a very important third point: We tried with sample size 20. This is a large sample size. Let's go down to a sample size of 3.
+
+```{r}
+n <- 3
+
+replicate( 10000, do_sample(n), simplify=FALSE ) %>% 
+  bind_rows %>%
+  mutate( sem = sd / sqrt(n) ) %>%
+  mutate( diff_to_true_mean = abs( mean - true_mean ) ) %>%
+  mutate( within_sem = diff_to_true_mean < sem ) %>%
+  summarise( fraction_within_sem = sum( within_sem / n() ) )
+```
+
+The smaller the sample size, the smaller the coverage probability. For $n=3$, it is *much* smaller than the 68% we would like to see.
+
+Here is a (somewhat advanced) R code which tries this for various sample values and plots the result
+
+```{r}
+map_dfr( 2:20, function(n) {
+  replicate( 3000, do_sample(n), simplify=FALSE ) %>% 
+    bind_rows %>%
+    mutate( sem = sd / sqrt(n) ) %>%
+    mutate( diff_to_true_mean = abs( mean - true_mean ) ) %>%
+    mutate( within_sem = diff_to_true_mean < sem ) %>%
+    summarise( fraction_within_sem = sum( within_sem / n() ) ) %>%
+    mutate( n=n )
+} ) %>%
+  mutate( student = 1 - 2 * pt( -1, n-1 ) ) %>%
+ggplot() +
+  geom_line( aes( x=n, y=fraction_within_sem ) ) +
+  geom_point( aes( x=n, y=fraction_within_sem ) ) + 
+  geom_line( aes( x=n, y=student ), col="blue" ) +
+  geom_point( aes( x=n, y=student ), col="blue" )
+```
+
+Here, we see one limitation of the simulation approach. Despite over a minute of computation time, the black line is quite wiggly and if you'd rerun it, it would be slightly different.
+
+Luckily, it is possible to calculate exactly the values that we need, namely the probability that the $\text{SD}/\sqrt{n}$ error bars contain the true values. The formula to do so was figured out more than 100 years ago by Henry Gossam, who wrote under the pseudonym "Student", and is the first of two steps to get to the famous Student's t test. The blue line shows the result of this calculation. It involves a call to `pt`, the cumulative distribution function (CDF) of Student's t distribution.
+
+To keep it simple: 
+
+Error bars according to the standard error of the mean (SEM) should contain the true value with probability 68%. For large sample sizes $n$ and approximately normally distributed data, dividing the sample standard deviation by $\sqrt{n}$ gives a good estimate of the SEM. For small sample sizes, however, this estimate is too small. William Gossam, writing under the pseudonym "Student", has figured out (in the context of developing Student's t test) the correction factor, by which you should multiply the length of your error bars. It is as follows
+
+```{r}
+tibble( sample_size = 2:20 ) %>%
+  mutate( student_factor = qt( pnorm( 1 ), sample_size-1 ) ) 
+```
+
+So, for an experiment with n=3, we should lengthen the SEM error bars by 32%. Does not sound like that much of a deal. However, things are a bit worse.
+
+## 95% Confidence Intervals
+
+You may have heard of the [68–95–99.7 rule](https://en.wikipedia.org/wiki/68%E2%80%9395%E2%80%9399.7_rule): If data follows a normal distribution, then 68% of the data will be within one standard deviation around the mean, 95% within two standard deviations and 99.7% within three. Again, we will justify it once we get to the normal distribution.
+
+For now, let us first quickly check this on our women's height data. How many values are less than one standard deviation away from the mean?
+
+```{r}
+( abs( height_women - mean(height_women) ) < sd(height_women) ) %>% mean
+```
+
+How did this work? First, we subtract the mean from each value (`height_women - mean(height_women)`), then, we take the absolute value (`abs`; to remove the minus sign in case the value was below the mean), and then we check whether these distances of the values to their mean is smaller than the standard deviation (`sd`). Now, we have a vector of TRUEs and FALSEs, and `mean` calculated the fraction of true values.^[Why can we use `mean` for this? I leave this as an exercise to you. Remember that internally, every TRUE is a 1 and every FALSE is a 0.] 
+
+How about 2 SDs and 3 SDs?
+
+```{r}
+( abs( height_women - mean(height_women) ) < 2 * sd(height_women) ) %>% mean
+```
+
+```{r}
+( abs( height_women - mean(height_women) ) < 3 * sd(height_women) ) %>% mean
+```
+
+This seems to be reasonably true.
+
+We have seen before that the standard error of the mean is a bit misleading. After all, even for large sample size, the probability of the true value faling out of its range is about one third (100% - 68% = 32%).^[Here, I have used sloppy wording. After all, for a specific experiment, there is no probability. Either the true value is within the error bar or not. One of the two is definitely the case even though we do not nkow whcih of the two is true. It is more correct to say: The rule to construct error bars is such that, averaging over very many applications of the rule on many normally distributed data sets, it will result in error bars covering the true value in 68% of the cases.] If we made the error bars twice as long, they should cover the true value in 95% of the cases.
+
+In fact, in many scientific disciplines, error bars are always drawn such that they cover the true value with 95% probability. These value range enclosed by such error bars is called a *95% confidence interval* (sometimes abbreviated CI95).
+
+For large sample size, simply divide the sample standard deviation by $\sqrt{n}$, as usual, then multiply by two, and indicate in the figure legend that your error bar describes a 95% confidence interval (and not a SEM). Strictly speaking, the factor is not exactly two, but 1.96
+
+```{r}
+qnorm( .975 )
+```
+
+(We will cover `qnorm`, the function to calculate quantiles of the normal distribution, another time.)
+
+More importantly, however, the Student factor changes:
+
+```{r}
+tibble( sample_size = 2:20 ) %>%
+  mutate( student_factor = qt( .975, sample_size-1 ) / qnorm(.975) ) 
+```
+
+Why are the factors so much larger than before? We should come back to this later.
+
+So, for n=3, we need to multiply the SEM by 4.3 ($2.195\times 1.96=4.30$) to get a correct 95% CI. 
+
+Let's make a simuation to convince us that this is really true. And this time, instead of just counting how often the error bars fail to include the true value, let's draw them. The figure below shows 100 "draws" (i.e., random selections of 20 women's height values), with a black dot for the estimated mean and red and blue lines for the error bars according to the naive SEM and to the correct 95% CI.
+
+```{r}
+replicate( 100, do_sample(3), simplify=FALSE ) %>% 
+  bind_rows %>%
+  mutate( draw = row_number() ) %>%
+  mutate( naive_sem = sd / sqrt(3) ) %>%
+  mutate( half_width_95 = 4.3 * naive_sem ) %>%
+ggplot +
+  geom_point( 
+    aes( x = draw, y = mean ) ) +
+  geom_segment( 
+    aes(
+      x    = draw,  y    = mean - naive_sem,
+      xend = draw,  yend = mean + naive_sem,
+    ),
+    col = "blue"
+  ) +
+  geom_segment(
+    aes(
+      x    = draw,  y    = mean - half_width_95,
+      xend = draw,  yend = mean + half_width_95
+    ),
+    col = "red", alpha = .5
+  ) +
+  geom_hline( yintercept = true_mean )
+```
+
+Next time you see a bar chart with error bars, drawn for just 3 values, remember this plot! Do you think the creaters of the plot have multiplied their $SD/\sqrt{3}$ by anything? If not, don't trust the figure!
+
+To sum up: SEM error bars should be replaced with 95% CI error bars. And the Student factor should be applied if one has few samples. That nobody in biology seems to do that *is* a problem.
+
+## Comparing means
+
+Now, we can give a first rough description of what Student's t test really does.
+
+Let's take two samples, one of 10 women and one of 10 men:
+
+```{r}
+height_women %>% sample(10) -> sample_women
+height_men   %>% sample(10) -> sample_men
+```
+
+The question we ask is: Is the population mean of the US men different from the population mean of the US women. We again try to do "inference", i.e., we try to answer this question about the whole population by using just our small sample of 10 men and 10 women.
+
+The t test answers this:
+
+```{r}
+t.test( sample_men, sample_women, var.equal=TRUE )
+```
+
+The answer is: Yes. the difference is significant and substantial. Using the same approach as above, R has calculated for us a 95% CI, this time not for the two individual means but for the difference: With 95% confidence, the true value lies in the given interval, whch is far to the right of zero. 
+
+So, men really are taller on average. Of course, we knew that, so we will have to look for more challenging cases next lesson.
+
+If we made the confidence level (now: 95%) larger, then the interval becomes wider and its lower bound will be closer to zero. For a very large confidence, maybe around 99.99%, the CI will eventually touch zero. And this is what the p value is: A CI for 1-p (e.g., 0.9999 for p=0.0001) will just reach the zero.
+
+This is an abstract and not very helpful explanation for the p value. We will get a better one next time.
+
+To finish, we will do one last simuation: We will repeat drawing samples of 10 men and 10 women, calculate the difference of the sample means and plot them:
+
+```{r}
+replicate( 10000,
+  tibble(
+     avg_men   = ( height_men   %>% sample(10) %>% mean ),
+     avg_women = ( height_women %>% sample(10) %>% mean )
+  ), simplify=FALSE ) %>%
+  bind_rows() %>%
+  mutate( draw = row_number() ) ->
+    sample_means
+```
+
+The first plot shows the 100 draws, always drawing a line from the women's average to the men's average:
+
+```{r}
+sample_means %>%
+  filter( draw <= 100 ) %>% 
+ggplot() +
+  geom_segment( aes(
+    x    = draw, y    = avg_women,
+    xend = draw, yend = avg_men ) ) +
+  ylab( "average height" ) +
+  geom_point( 
+    aes( x = draw, y = avg_women ),
+    col = "red" ) +
+  geom_point( 
+    aes( x = draw, y = avg_men ),
+    col = "blue" ) +
+  geom_hline( yintercept = mean(height_women), col="red", alpha=0.5 ) +
+  geom_hline( yintercept = mean(height_men), col="blue", alpha=0.5 ) +
+  ylab( "height" )
+```
+
+This is a fancy plot (Try to understand the R code, if you want to improve your understanding of ggplot.),
+but simply plotting a histogram of the differences might be more useful
+
+```{r}
+sample_means %>%
+ggplot +
+  geom_histogram(aes( avg_men - avg_women ) )
+```
+
+This should give you a first feeling how much an estimate of a difference (perhaps between a gene's expression in treated and control samples) can vary even if you have 10 samples. With n=10, we have a highly significant p value but our estimate of value of the difference is still far from precise.

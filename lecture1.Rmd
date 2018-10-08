@@ -1,0 +1,403 @@
+---
+title: 'SFB 1036 Course on Data Analysis: Lesson 1'
+author: "Simon Anders"
+output:
+  html_document:
+    df_print: paged
+---
+
+### R and the Tidyverse
+
+This write-up provides an overview over the content of the first lecture. We use here the statistical programming language [R](https://www.r-project.org/). For thsi first lecture, try to understand the statistical concepts but for now only glance 
+over the R commands. We will discuss details in later lectures on what exactly they mean and how you can write them yourself.
+
+However, if you want to look ahead: We restrict ourself to using a subset of R, called the "[tidyverse](https://www.tidyverse.org/)".
+The tidyverse is a project to "tidy up" the complicated universe of dozens of styles and thousands of commands that R has become 
+in its over 30 years of history. For beginners, I recommend to start with learning only the tidyverse part of R.
+
+There is an excellent textbook by the makers of the Tidyverse that teaches you data science using R:
+
+| Garrett Grolemund and Hadley Wickham: *R for Data Science*
+| online version: for free at http://r4ds.had.co.nz/
+| print version: O'Reilly, 2017; ISBN-13: 978-1491910399
+
+
+### Exploratory and confirmatory analysis
+
+Exploratory data analysis (EDA): If you get data, you should spend substantial time to explore the data set by looking at it from many angles, on the one hand to learn about peculiarities, strengths and weaknesses of your data, on the other hand, to find new insights and form hypotheses. Knowing many techniques for EDA is essential to do good data science.
+
+Confirmatory analysis (inferential statistics): Once you have found something interesting or if you want to test a hypothesis, you have to try to reject the null hypothesis that what you see in the data is just the result of random fluctuation. We will delay the discussion of what this exactly means, why this is called "inference", and what p values really are, to the next lesson.
+
+It is important to be well versed in both of these basic data analysis tasks, and to not neglect one for the other. This first lesson will focus on simple EDA.
+
+
+### The NHANES data
+
+Our example data set for today is the [National Health and Nutrition Examination Survey (NHANES)](https://www.cdc.gov/nchs/nhanes/index.htm) of the Center for Disease Control and Prevention (CDC). We will use the NHANES [data set for 2015-2016](https://wwwn.cdc.gov/nchs/nhanes/continuousnhanes/default.aspx?BeginYear=2015) (Continuous NHANES, data set "I"), and there the Demographics data ("DEMO") and the Body Measures part ("BMX") of the Examinations data. We first download the two data tables: [`DEMO_I.XPT`](https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/DEMO_I.XPT) and [`BMX_I.XPT`](https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/BMX_I.XPT). If you want to fully understand this data, look at the [study overview](https://wwwn.cdc.gov/nchs/nhanes/continuousnhanes/overview.aspx?BeginYear=2015) and at the documentation pages [for DEMO](https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/DEMO_I.htm) and [for BMX](https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/BMX_I.htm)
+
+We first load the Tidyverse packages
+
+```{r}
+library( tidyverse )
+```
+
+Load the two data tables^[These tables are in the XPT format, which is the data export format of SAS, another statistics package. We use here a function from the tidyverse package "haven", which collects functionality to read such data in "foreign" formats.]
+
+```{r}
+nhanes_demo_i <- haven::read_xpt( "NHANES/DEMO_I.XPT" )
+nhanes_bmx_i <- haven::read_xpt( "NHANES/BMX_I.XPT" )
+```
+
+Have a look at the demographics table
+```{r}
+nhanes_demo_i
+```
+
+The meaning of the abbreviations for the column names are given in the data documentation page, and also in the columns' "label attributes" which are only displayed if we explictely ask R for that:^[Such column description are not really typical of tidyverse R. They are here because the NHANES people seem to use SAS, another statistics package, which organises data this way.]
+
+```{r}
+# Don't worry about this complicated looking command now; just look at the results
+map_chr( nhanes_demo_i, attr, "label" ) %>% { tibble( colname = names(.), description = . ) }
+```
+
+Let's also have a look at the body measurements table
+
+```{r}
+nhanes_bmx_i
+```
+
+And the column descriptions:
+
+```{r}
+map_chr( nhanes_bmx_i, attr, "label" ) %>% { tibble( colname = names(.), description = . ) }
+```
+
+To make our life easier, let's merge the two columns, remove most columns, keep only those that we need and give them simpler names
+
+```{r}
+# Again, don't worry about this complex looking code for now; we'll get there eventually.
+
+# Merge the two tables, using the "SEQN" column to know which rows belong together
+inner_join( 
+    nhanes_demo_i, 
+    nhanes_bmx_i, by="SEQN" ) %>%
+# Select the columns we need, and rename them
+  select( 
+     subjectId = SEQN,
+     age = RIDAGEYR,
+     sex = RIAGENDR,
+     height = BMXHT,
+     weight = BMXWT ) %>%
+# Change the values in the "sex" column from 1 and 2 to "male" and "female"  
+  mutate(
+    sex = fct_recode( factor(sex), male="1", female="2" )
+  ) -> 
+# Save the result ("->") in the following variable  
+    nhanes
+```
+
+At the end of this complex operation, we have saved the result (using the arrow operator `->`) in a new variable called `nhanes`. Lets' have a look into it
+
+```{r}
+nhanes
+```
+
+### Data exploration with scatter plots
+
+Scatter plots (also called x-y plots) are *the* basic tool to explore potential relations between two variables. For example, how do people grow with age?
+
+```{r}
+ggplot( nhanes ) +
+  geom_point(
+    aes(
+      x = age,
+      y = height
+    )
+  )
+```
+We can see that people seem to grow up to age 16 or so, and the stay at this height. (Is this correct? Time to 
+think about cross-sectional versus longitudinal data...). 
+
+Let's dissect the command: With `ggplot( nhanes )`, we tell R that we wish to plot data from the `nhanes` data table, using 
+the "[ggplot](https://ggplot2.tidyverse.org/)" plotting functionality. Then, we specify that we wish to make a scatter plot, i.e., 
+a plot in which each entry in our data table (i.e., each table row) is represented as a *point*: `ggplot( nhanes ) + geom_point( ... )`.
+In ggplot's parlance, the thing that represents a data entity (here, a point) is called a "geom", and the specification what exactly it should represent is called (somewhat misleadingly) the "aesthetics" (`aes`). A geom_point needs at least two aesthetics specification, namely `x` and `y`.
+
+Let's refine things a bit:
+
+```{r}
+ggplot( nhanes ) +
+  geom_point(
+    aes(
+      x = age,
+      y = height,
+      color = sex
+    ),
+    size = 0.4,
+    alpha = 0.5
+  )
+```
+
+Now I have added another aesthetic, called "color", and set it to represent sex. Note how ggplot automatically has chosen two colors for the two sexes and added a color legend to the right. I have also set `size` to 0.4 to make the points a bit smaller and `alpha = 0.5` makes them half transparent (`alpha=1`, the default, is opaque: you can see only the point on top; and `alpha=0` would be fully transparent, i.e., invisible). These two parameters are aesthetics, too. They are, however, outside the `aes(...)` construct because they do not depend on the data table but are the same for all points. You can, however, also put them inside and use, e.g. differently sized points (so-called bubble or balloon plot).
+
+To learn more about `geom_point` and the aestethics, type `?geom_plot` to see the [help page for this function](https://ggplot2.tidyverse.org/reference/geom_point.html).  
+
+Why does R warn us about missing data? Let's check for which data records the values for age or height are *not available* (abbreviated: NA).
+
+```{r}
+nhanes %>%
+  filter( is.na(age) | is.na(height) )
+```
+
+How about weight?
+
+```{r}
+ggplot( nhanes ) +
+  geom_point(
+    aes(
+      x = height,
+      y = weight,
+      color = sex
+    ),
+    size = 0.4,
+    alpha = 0.5
+  )
+```
+
+Let's redo this using only adult subjects (age >= 20):
+
+```{r}
+nhanes %>%
+  filter( age >= 20 ) %>%
+ggplot() +
+  geom_point(
+    aes(
+      x = height,
+      y = weight,
+      color = sex
+    ),
+    size = 0.4,
+    alpha = 0.5
+  )
+```
+
+Which of these people are overweight or obese? What is a healthy weight depends on body height. Supposedly, dividing weight by the square of the height (`height^2`) normalizes for the effect of height differences. This is called the body mass index (BMI):
+
+```{r}
+nhanes %>%
+  filter( age >= 20 ) %>%
+ggplot() +
+  geom_point(
+    aes(
+      x = height,
+      y = weight / ( height/100 )^2,
+      color = sex
+    ),
+    size = 0.4,
+    alpha = 0.5
+  )
+```
+Note that we have divided height by 100 for the BMI, because our column gives height in centimeters but the BMI formula wants it in meters: BMI = weight[kg] / (height[m])^2.
+
+For future use, let's add a new column to our data table for the BMI. The (strangely named) function `mutate` allows us to add or change columns.
+
+```{r}
+nhanes %>%
+  mutate( bmi = weight / (height/100)^2 ) ->
+    nhanes
+```
+
+Note the `-> nhanes` at the end, to write the result back into the variable. Otherwise, R would merely print the resulting table onto the screen and forget about it.
+
+The WHO considers BMI values from 18.5 to 25 as normal, below that as underweight, above as overweight, and above 30 as obese. Let's draw some lines to mark this boundaries
+
+```{r}
+nhanes %>%
+  filter( age >= 20 ) %>%
+ggplot() +
+  geom_point(
+    aes(
+      x = height,
+      y = bmi,
+      color = sex
+    ),
+    size = 0.4,
+    alpha = 0.5
+  ) +
+  geom_hline(
+    yintercept = c( 18.5, 25, 30 ),
+    alpha = 0.4
+  )
+```
+
+Now, we have seen a second "geom": `geom_hline` for a horizontal line. The aesthetics to say where to place the line is called (maybe a bit verbosely) `yintercept`. Instead of specifying a column name, we give the values directly: `c( 18.5, 25, 30)`. The function `c` here builds a data vector (i.e., just a rowlist of numbers) out of the individual numbers. ("c" stands for "concatenate".)
+
+### Histograms
+
+It is hard to see in the scatter plots hwo many people are actually obese. A histogram might be better
+
+```{r}
+nhanes %>%
+  filter( age >= 20 ) %>%
+ggplot() +
+  geom_histogram(
+    aes( x = bmi )
+  )
+```
+
+The "histogram" geom automatically cuts the bmi values into 30 bins, counts the number of subjects that fall into 
+each bin and plots these. 
+
+Remember that in a histogram, the *area* corresponds to numbers of subjects, not the height.
+
+Let's add marker lines for the WHO categories and stratify by sex
+
+```{r}
+nhanes %>%
+  filter( age >= 20 ) %>%
+ggplot() +
+  geom_histogram(
+    aes( x = bmi ),
+    binwidth = 2 ) +
+  geom_vline( xintercept = c( 18.5, 25, 30 ), alpha=.3 ) +
+  facet_grid( sex ~ . )
+```
+
+Here, we have a new feature: facetting (also called trellis plotting). The `facet_grid` term arranges the plots into a grid, such that each row corresponds to another level of the factor "sex" and each column corresponds to another level of "the factor the "empty factor" `.`. (In other words: The `.` behind the tilde^["Tilde" (pronounced /ˈtɪldə/) is how one calls the "wavy dash" sign: `~`] is just a place holder, where we could put another column name if we wished to have more than one column.)
+
+### Counting with tidyverse
+
+It seems that more than half of the population is overweight. Can we get exact numbers? Yes:
+
+```{r}
+nhanes %>%
+  filter( age >= 20) %>%          # use adults only
+  count( sex, bmi > 25 )          # Divide up the data into groups, count the number of rows in each group
+```
+
+The `count` function above is just a short-cut for this here
+
+```{r}
+nhanes %>%
+  filter( age >= 20) %>%
+  group_by( sex, bmi > 25 ) %>%
+  summarise( number = n() )
+```
+
+This is a construction that we will use a lot, so let's dissect this simple first example: `group_by` divides up the data table rows into groups according to `sex` and according to `bmi > 25`. As you can see from the six rows of the resulting table, there are six combination of these factors and hence six groups, each comprising some of the rows of the data table. The function `summarise` now reduces each group to a single row in the output table, by applying the function `n` onto each group and storing the result obtained in the column `number`. The function `n` simply counts the number of data table rows in the group.
+
+Let's also study a slightly different construction:
+
+```{r}
+nhanes %>%
+  filter( age >= 20 ) %>%
+  filter( !is.na(bmi) ) %>%    # Keep only rows for which the BMI is not NA  ("!" means "not")
+  group_by( sex ) %>%   
+  summarise( 
+    number = n(),
+    number_overweight = sum( bmi>25 ) )
+```
+
+Here, we have only one grouping variable, `sex`, with only two levels, `male` and `female`, and hence get an output table with only two rows. Now, `summarise` calculates two summery statistics and hence makes two new columns: `number` is just the number of rows in the group, as reported by `n`, and `number_overweight` is the number of subjects with a BMI over 25.
+
+To understand this last part, let's break it up into parts. First, let's use `mutate` again (which, as you may recall, is the strangely named function that adds or changes a column).
+
+```{r}
+nhanes %>%
+  mutate( is_overweight = bmi>25 )
+```
+
+As you can see, a condition like `bmi>25` simply yields a column with TRUE and FALSE as values.^[This is called a "logical" or "Boolean" vector.]. Internally, a TRUE is represented as 1 and a FALSE as 0. Hence, the sum over such a vector (as in `sum( bmi>25 )`) is just the number of ones, i.e., of TRUEs. This call to `sum` takes a whole column and outputs a single scalar. hence it has to appear inside `summerise`:
+
+```{r}
+nhanes %>%
+  filter( !is.na(bmi) ) %>%
+  mutate( is_overweight = bmi>25 ) %>%
+  summarise(
+    number_overweight = sum( is_overweight )
+  )
+```
+
+Putting all this back together, and adding one last line to divide the number of overweight people by the total number of people, we get the fraction of subjects that are overweight:
+
+```{r}
+nhanes %>%
+  filter( !is.na(bmi) ) %>%
+  mutate( is_overweight = bmi>25 ) %>%
+  group_by( sex ) %>%
+  summarise(
+    number = n(),
+    number_overweight = sum( is_overweight )
+  ) %>%
+  mutate( percent_overweight = 100 * number_overweight / number )
+```
+
+If we only want to get the percentage, we can collapse a few lines and write this shorter
+
+```{r}
+nhanes %>%
+  filter( !is.na(bmi) ) %>%
+  group_by( sex ) %>%
+  summarise( number = 100 * sum( bmi > 25 ) / n() )
+```
+
+We have just learned some basics of "dplyr", the part of the tidyverse concerned with manipulating data tables:
+
+- `%>%` hands over data from one command to the next in a chain of commands
+- `filter` selects specific table rows and removes the others. Inside a `filter` call, specify conditions to indicate the rows you want to keep.
+- `select` selects specific table columns and removes the other. Inside `select`, list the columns you want to keep, and possible indicate new names if you want to change the column name
+- `mutate` changes a column or adds a new column. Within the `mutate` call, you always have expressions of the structure `column_name = some_function( ... )`, where the calculation on the right hand side of the equal sign should take data vectors (i.e., columns) and result in data vectors of the *same* length. `mutate` may add columsn but the number of rows is the same before and after a mutation.
+- `group_by` assigns the rows to distinct groups, according to the columns indicated
+- `summarise` reduces each of these groups of data rows to a single row. The expressions in the `summerise` call hence have to be calculations that take vectors (columsn) but produce only single values.^[Such calculations produce so-called "summary statistics". Typical examples are the sum of the values (`sum`), their average (`mean`) or simply their number (`n`).]
+
+Once you are more familiar with these, you will find the ["Data transformations with dplyr" Cheat Sheer](https://github.com/rstudio/cheatsheets/raw/master/data-transformation.pdf) a handy guide.
+
+
+## More data exploration
+
+How does the prevalence of obesity change with age? 
+
+```{r}
+nhanes %>%
+  filter( age >= 17.5 ) %>%          
+  filter( !is.na(bmi) ) %>%        
+  mutate( age_rounded = round( age/5 ) * 5 ) %>%
+  group_by( sex, age_rounded ) %>%
+  summarise( frac_overweight = sum( bmi>25 ) / n() ) %>%
+ggplot + 
+  geom_line( aes( x=age_rounded, y=frac_overweight, col=sex ) )
+```
+
+What was new this time? We used a new geom, `geom_line`, for a line chart. And we used a trick to bin our data into age bins of 5 years: Dividing the age by 5, rounding and then re-multiplying with 5.
+
+FInally, here is more complicated example, just to show how to build more complex graphics
+
+```{r}
+nhanes %>%
+  filter( age >= 15 ) %>%          
+  filter( !is.na(bmi) ) %>%        
+  mutate( category = cut( bmi,     
+     breaks = c( 0, 18.5, 25, 30, Inf ),
+     labels = c( "underweight", "normal", "overweight", "obese" ),
+     ordered = TRUE ) ) %>%
+  mutate( category = fct_rev(category) ) %>%
+  mutate( age = cut_interval( age, length=5, ordered=TRUE ) ) %>%
+  count( sex, age, category ) %>%
+  group_by( sex, age ) %>%
+  mutate( frac = n / sum(n) ) %>%
+ggplot + 
+  geom_col(aes(x=age,y=frac,fill=category)) +
+  facet_grid( sex ~ . )
+```
+
+### More on ggplot
+
+To learn more about the capabilities of ggplot, have a look at:
+
+- the help pages, also available [online](https://ggplot2.tidyverse.org/reference/index.html)
+- the [overview on aesthetics](https://ggplot2.tidyverse.org/articles/ggplot2-specs.html)
+- the ggplot book: "*ggplot2 -- Elegant Graphics for Data Analysis" by Hadley Wickam, the creator of ggplot (and the founder of the tidyverse project); published by O'Reilly (2nd edition: 2016)
+- the [R Graph Gallery](https://www.r-graph-gallery.com/) for inspiration
+
+
+### Footnotes
