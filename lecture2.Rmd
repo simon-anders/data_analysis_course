@@ -60,7 +60,7 @@ mean( height_women )
 
 If the CDC repeated this study, measing another set of ~2500 randomly selected women, would we get the same value again? How close would we get? 
 
-Probably quite close. We can assume that this value is very close to the *population mean*, i.e., the average of the heights of *all* adult women who lived in the USA at the time of the survey.^[Strictly speaking, this is not true because the survey has deliberately oversampled certan minority populations. And if these tend to be shorter or taller than caucasian Americans, our mean would be biased. We could easily correct for the bias by downweighting the subjects from the oversampled groups, but this would needlessly complicate our discussion. Hence, let's pretend that the survey cohort is a *representative* sample of the US population.] For the following, we will assume that `{r} mean( height_women )` *is* the population mean.
+Probably quite close. We can assume that this value is very close to the *population mean*, i.e., the average of the heights of *all* adult women who lived in the USA at the time of the survey.^[Strictly speaking, this is not true because the survey has deliberately oversampled certan minority populations. And if these tend to be shorter or taller than caucasian Americans, our mean would be biased. We could easily correct for the bias by downweighting the subjects from the oversampled groups, but this would needlessly complicate our discussion. Hence, let's pretend that the survey cohort is a *representative* sample of the US population.] For the following, we will assume that `r mean( height_women )` *is* the population mean.
 
 But what if we only had measured 20 women? Then, our estimate might quite a bit off from the population mean.
 
@@ -122,7 +122,7 @@ ggplot +
   geom_histogram( aes( avg_height ) )
 ```
 
-If we assume that the value `{r} mean(height_women)` is the ground truth, we can see that we can that we will typically be up to 2 cm, sometimes even up to 5 cm, off.
+If we assume that the value `r mean(height_women)` is the ground truth, we can see that we can that we will typically be up to 2 cm, sometimes even up to 5 cm, off.
 
 ## The sampling distribution of the mean
 
@@ -151,8 +151,8 @@ A better choice might be to look at the 2.5- and 98.5-percentiles:
 ```{r}
 quantile( many_averages, c( 0.025, 0.985 ) )
 ```
-What does this mean? It means that 2.5% of all the values in `many_averages` are below `{r} quantile( many_averages, 0.025 )`. 98.5% of all the values are below `{r} quantile( many_averages, 0.985 )`, and hence 2.5% are above `{r} quantile( many_averages, 0.985 )`. So, we can give a 95%-interval: We can say that 95% of all the values in `many_averages` are between `{r} quantile( many_averages, 0.025 )` and `{r} quantile( many_averages, 0.985 )`.^[How does the `quantile` function work? Conceptually, it sorts the values and then goes doen the list until it has seen the desired percentage of the values and return the value at that place. The 50-percentile (also called the 0.5-quantile) is the value exactly in the middle: We call that quantile the *median*. Exactly half of all values are below and half are above the median.]
-So, the length of this interval, `{r} quantile( many_averages, 0.985 ) - quantile( many_averages, 0.025 )` might be a good value to describe precision of our estimate. In fact, many people make their error bars not indicate the SEM but the so-called 95% confidence interval.  
+What does this mean? It means that 2.5% of all the values in `many_averages` are below `r quantile( many_averages, 0.025 )`. 98.5% of all the values are below `r quantile( many_averages, 0.985 )`, and hence 2.5% are above `r quantile( many_averages, 0.985 )`. So, we can give a 95%-interval: We can say that 95% of all the values in `many_averages` are between `r quantile( many_averages, 0.025 )` and `r quantile( many_averages, 0.985 )`.^[How does the `quantile` function work? Conceptually, it sorts the values and then goes doen the list until it has seen the desired percentage of the values and return the value at that place. The 50-percentile (also called the 0.5-quantile) is the value exactly in the middle: We call that quantile the *median*. Exactly half of all values are below and half are above the median.]
+So, the length of this interval, `r quantile( many_averages, 0.985 ) - quantile( many_averages, 0.025 )` might be a good value to describe precision of our estimate. In fact, many people make their error bars not indicate the SEM but the so-called 95% confidence interval.  
 
 ## Mean, standard deviation and Student's t distribution
 
@@ -202,7 +202,7 @@ many_sds <- replicate( 10000,
 hist( many_sds )
 ```
 
-The standard procedure usually employed in biology is to take the sample standard deviation (i.e., the standard deviation over the measured values), divide this by $/sqrt{n}$, the square root of the sample size, and call this the standard error of the mean. Then, one draws error bars one SEM above and below the sample average.
+The standard procedure usually employed in biology is to take the sample standard deviation (i.e., the standard deviation over the measured values), divide this by $\sqrt{n}$, the square root of the sample size, and call this the standard error of the mean. Then, one draws error bars one SEM above and below the sample average.
 
 Let's see how often the true value is within such error bars. We use this question to learn a bit more about R programming.
 
