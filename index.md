@@ -12,7 +12,7 @@ This lecture explains how to use R/tidverse and ggplot to explore a data set.
 (The HTML file is for reading in your web browser; the Rmd file allows you to open the lecture as notbook in RStudio and rerun all computations.)
 
 
-### [Lecture 2](lecture1.html): Inference the pedastrian way
+### [Lecture 2](lecture2.html): Inference the pedastrian way
 
 In this lecture, we carefully approach the topic of inference, and study the standard error of the mean
 
