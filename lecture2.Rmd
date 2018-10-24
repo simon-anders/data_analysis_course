@@ -305,11 +305,11 @@ ggplot() +
 
 Here, we see one limitation of the simulation approach. Despite over a minute of computation time, the black line is quite wiggly and if you'd rerun it, it would be slightly different.
 
-Luckily, it is possible to calculate exactly the values that we need, namely the probability that the $\text{SD}/\sqrt{n}$ error bars contain the true values. The formula to do so was figured out more than 100 years ago by Henry Gossam, who wrote under the pseudonym "Student", and is the first of two steps to get to the famous Student's t test. The blue line shows the result of this calculation. It involves a call to `pt`, the cumulative distribution function (CDF) of Student's t distribution.
+Luckily, it is possible to calculate exactly the values that we need, namely the probability that the $\text{SD}/\sqrt{n}$ error bars contain the true values. The formula to do so was figured out more than 100 years ago by [William Gosset](https://en.wikipedia.org/wiki/William_Sealy_Gosset), who wrote under the pseudonym "Student", and is the first of two steps to get to the famous Student's t test. The blue line shows the result of this calculation. It involves a call to `pt`, the cumulative distribution function (CDF) of Student's t distribution.
 
 To keep it simple: 
 
-Error bars according to the standard error of the mean (SEM) should contain the true value with probability 68%. For large sample sizes $n$ and approximately normally distributed data, dividing the sample standard deviation by $\sqrt{n}$ gives a good estimate of the SEM. For small sample sizes, however, this estimate is too small. William Gossam, writing under the pseudonym "Student", has figured out (in the context of developing Student's t test) the correction factor, by which you should multiply the length of your error bars. It is as follows
+Error bars according to the standard error of the mean (SEM) should contain the true value with probability 68%. For large sample sizes $n$ and approximately normally distributed data, dividing the sample standard deviation by $\sqrt{n}$ gives a good estimate of the SEM. For small sample sizes, however, this estimate is too small. William Gosset, writing under the pseudonym "Student", has figured out (in the context of developing Student's t test) the correction factor, by which you should multiply the length of your error bars. It is as follows
 
 ```{r}
 tibble( sample_size = 2:20 ) %>%
