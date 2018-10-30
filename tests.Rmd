@@ -372,15 +372,26 @@ R has, again, a way to calculate this number without having to try out thousands
 cor.test( x, y )
 ```
 
+# Multiple testing
+
+Two further points why a p value threshold at 0.05 must not be used with a "one size fits all" attitude:
+
+- If many researchers test the same or hypothesis (or a set of similar hypotheses), then one in 20 
+research teams will get a p value below 1/20=5%, even if all the hypotheses are wrong. See [xkcd #882](https://xkcd.com/882/).
+Only the "successful" team will publish a paper, while we will never hear about the other 19 teams. Hence, fo all the findings
+reported in the literature with p values to just barely below 0.05 level, we may expect that very many, if not most of them,
+are wrong.
+
+- [Sally Clark](https://en.wikipedia.org/wiki/Sally_Clark) lost two babies to sudden infant death syndrome ([SIDS](https://en.wikipedia.org/wiki/Sudden_infant_death_syndrome)), i.e. to unexplained sudden death while sleeping.
+As SIDS only happens to around one in 8000 babies, the court considered it impossibly unlikely that both babies died of natural
+causes and convicted her for murder. Two subsequent SIDS cases have very low probability, $1 / 8000^2 = 1.6\cdot 10^{-8}$, but given that
+millions of babies are born every year in Europe, we should fully expect that once in a while, a mother suffers this fate twice, 
+without concluding that she must be a murderer. Hence, even an extremely low p value can be misleading.
+
 
 # Further material (not tidied up yet)
 
 ```
-
-# See xkcd #882 (jelly beans)
-
-# Sally Clark case (SIDS: 1/8500)
-
 
 # Now continuous data
 
