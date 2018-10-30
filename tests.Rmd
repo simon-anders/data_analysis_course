@@ -1,0 +1,491 @@
+---
+title: 'SFB 1036 Course on Data Analysis: Lesson 3'
+author: "Simon Anders"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r echo=FALSE,results='hide'}
+set.seed(12345)
+```
+
+# Tests and p values
+
+## The Lady Tasting Tea
+
+In the early 1930, at a summer party of the [Rothamstad Research Station][https://en.wikipedia.org/wiki/Rothamsted_Research] in England, a discussion
+took place about tea, namely whether it makes a difference to the taste whether one
+pours first the milk or first the tea into the cup. A lady claimed that she could tell
+the difference which was not believed. See [here](https://en.wikipedia.org/wiki/Lady_tasting_tea) 
+for Wikipedia's account of the anecdote, which is considered the occasion where 
+[R. A. Fisher](https://en.wikipedia.org/wiki/Ronald_Fisher) came up with the idea of the 
+null hypothesis and the p value.
+
+A randomized trial was set up to test her claim: Eight cups were taken, into four of them
+tea was poured first ("T") and then milk, into the other four milk first ("M"), then tea.
+
+We represent this in R as a vector:
+
+```{r}
+cups <- c( "T", "T", "T", "T", "M", "M", "M", "M" )
+```
+
+We can use the `sample` function to randomly shuffle ("permute") the order of the cups:
+
+```{r}
+sample( cups )
+```
+
+Every time you call `sample` you get a random permutation:
+
+```{r}
+sample( cups )
+sample( cups )
+```
+
+
+Presented with these eight cups in random order, can the lady pick the four cups which had the tea poured in
+first? If so, does this consitute sufficient evidence that we should believe her 
+claim that she can taste a difference? WHat if she only get three of the four cups
+right?
+
+[R. A. Fisher](https://en.wikipedia.org/wiki/Ronald_Fisher), who was present at 
+the party, agued that we have to calculate the probability that she could achieve
+this result by chance, by just picking four cups at random and thus making a lucky guess.
+
+So, he started with formulating what he called the ``null hypothesis'': The lady's
+pick of four cups is entirely random (because she cannot taste a difference). 
+
+Let R select four cups at random. Again, we use the `sample` function, which now
+picks a "random sample" of 4 elements from our vector `cups` with 8 elements
+
+```{r}
+s <- sample( cups, 4 )
+s
+```
+
+How many of the cups in this sample `s` have the tea first?
+
+```{r}
+sum( s == "T" )
+```
+
+We now want to see how often it happens that one gets 3 or more cups with tea first.
+Does `s` contain three or more "T" cups?
+
+```{r}
+sum( s == "T" ) >= 3
+```
+Let's repeat these steps 100 times
+
+```{r}
+replicate( 100, 
+   sum( sample( cups, 4 ) == "T" ) >= 3 )
+```
+
+What fraction of these results were `TRUE`?
+
+Let's do it again, this time even 10,000 times and use the `mean` function to get the fraction of `TRUE`s
+
+```{r}
+mean( replicate( 10000, sum( sample( cups, 4 ) == "T" ) >= 3 ) )
+```
+
+Were 10,000 samples enough to get a stable estimate of the probability? Let's try again:
+
+```{r}
+mean( replicate( 10000, sum( sample( cups, 4 ) == "T" ) >= 3 ) )
+```
+
+Yes, we got the same first two digits. It seems that 24% is a good answer to the question?
+WHat is the probability of getting at least 3 cups right?
+
+And how often, that one gets all four right?
+
+```{r}
+mean( replicate( 10000, sum( sample( cups, 4 ) == "T" ) == 4 ) )
+```
+
+The lady did in fact get all four cups right. The probability for her managing to do so under the assumption
+of the null hypothesis (that she was guessing blindly) is less than 2%. The value we just obtaines is the what we call the *p value* associated with the outcome of our experiment.
+
+We asked our computer to test 10,000 random samples to get the p value. But in 1930, FIsher did not have a 
+computer, and probably also wouldnt have had the patience to make thousands of tried. How did he get the p value?
+
+If we randomly rearrange ("permute") the eight cups, there are only 70 possible ways to permute them. One way to see
+that is to ask R to list them all. (You need to install the `combinat` package to run this command.)
+
+```{r}
+sapply( unique( combinat::permn( cups ) ), paste, collapse=" " )
+```
+
+You can also arrive at the number 70 by calculating the [binomial coefficient]() $\binom{8}{4}$,
+as we have 4 "T" cups among our 8 tea cups. (See the Wikipedia article on [combinations](https://en.wikipedia.org/wiki/Combination) if you want to know what that means. )
+
+Let's say we always pick the first 4 cups: How many of the 70 permutations above have "T" at the
+four first places? Only one. Hence we probability to get all four cups correct is 1 in 70. The 
+exact value of the p value we tried to calculate above by random tries is 1/70:
+
+```{r}
+1/70
+```
+
+There are 16 permutations that have 3 "T" cups and 1 "M" cups among the first four. So, the probability to get exactly 3 cups right is 16/70, and to get *at least* 3 right is 17/70. Hence, if the lady had gotten only 3 cups
+right, the p value for that ourcome would have been 
+
+```{r}
+17/70
+```
+
+The general way to calculate this is the [hypergeometric distribution](https://en.wikipedia.org/wiki/Hypergeometric_distribution).
+For example, the probability to get exactly 3 cups right (16/70) is
+
+```{r}
+16/70
+dhyper( 3, 4, 4, 4 )
+```
+
+The `dhyper` function is called thus:
+
+  dhyper( 
+     number of cups correctly said to have milk first,
+     number of cups with milk first,
+     number of cups with tea first,
+     number of cups said to have milk first )
+
+If you look at its help page, you will read the same, but talking about black and white balls
+rather than tea and milk.
+
+This kind of problem is quite common, and so, Fisher turned his approach into a general
+method, called "Fisher's test":
+
+We first set up what is called a "contingency table", with rows for the actual truth 
+and columns for the guess:
+
+```
+              |         guess
+     truth    | tea first   milk first |  Sum
+   -----------+------------------------+------
+   tea first  |     3           1      |   4
+   milk first |     1           3      |   4
+   -----------+------------------------+------
+   Sum        |     4           4    |   8
+```
+
+The margins are just the sums, we don't need them. We put just the core part into
+a variable. We use `rbind` (row bind) to enter the two matrix rows and bind them
+together into a matrix
+
+```{r}
+m <- rbind( c(3,1), c(1,3) )
+m
+```
+
+Now, we can add this to the the FIsher test function
+
+```{r}
+fisher.test( m, alternative = "greater" )
+```
+
+And, again, we get our p value of 17/70.
+
+
+## A loaded die
+
+A similar example: A die is thrown 60 times. We would expect to see a six 10 times, but we see it
+15 times. Is the die loaded?
+
+Our null hypothesis: The die is fair, i.e., the probability for a six is 1/6
+
+Then, the probability to see $k$ sixes among the 60 throws is given by the [binomial distribution](https://en.wikipedia.org/wiki/Binomial_distribution). Instead of copying the
+formula from WIkipedia, we simply ask R what the probability is to see exactly 15 sixes:
+
+```{r}
+dbinom( 15, 60, 1/6 )
+```
+
+In our experiment to see whether the die is loaded, we give the outcome by counting
+how many sixes we have. The number of sixes is our *test statistic*. The test statistic can 
+take on 61 possible values, the numbers from 0 to 60. In R, we write this with a colon:
+
+```{r}
+0:60
+```
+For each value, `dbinom` can give us the probability of obtaining this value under the assumption
+of our null hypothesis (namely, that the die is fair and the probability for a six is 1/6):
+
+```{r}
+dbinom( 0:60, 60, 1/6 )
+```
+
+Let's plot this
+
+```{r}
+plot( 
+   x = 0:60, 
+   y = dbinom( 0:60, 60, 1/6 ) )
+```
+
+The probability to then see 15 or more sixes is obtained by calculating `dbinom` for all the
+values from 15 to 60 and summing them up
+
+```{r}
+sum( dbinom( 15:60, 60, 1/6 ) )
+```
+
+There is also the `pbinom` function which can tell us the probability to see 14 or fewer sixes. 
+We shoudl hence get the same value this way:
+
+```{r}
+1 - pbinom( 14, 60, 1/6 )
+```
+
+Did we use these functions correctly? Is the the binomial distribution the right one to use? To 
+be sure, let's simulate:
+
+```{r}
+mean( replicate( 100000, sum( sample( 1:6, 60, replace=TRUE ) == 6 ) >= 15 ) )
+```
+
+We get aproximately the same p value.
+
+How did this complicates command work? To understand it, read it from inside out. Start with the middle part:
+
+```{r}
+sample( 1:6, 60, replace=TRUE )
+```
+
+This gives us 60 throws of the die. The `replace=TRUE` tells `sample` that it can report the same number several times, i.e., that it should pick among each of the six faces of the die (1:6) anew for each throw, rather than removing from the pool the numbers that have already been picked.
+
+Then, we check, how many sixes there are in such a sample of 60 throws
+
+```{r}
+sum( sample( 1:6, 60, replace=TRUE ) == 6 )
+```
+
+We do this many times, to see how many sixes one might see
+
+```{r}
+replicate( 100, sum( sample( 1:6, 60, replace=TRUE ) == 6 ) )
+```
+
+We then check for each outcome wherher it is 15 or more and get the fraction of TRUE results
+
+```{r}
+mean( replicate( 10000, sum( sample( 1:6, 60, replace=TRUE ) == 6 ) >= 15 ) )
+```
+This is indeed the same as
+
+```{r}
+sum( dbinom( 15:60, 60, 1/6 ) )
+```
+
+or, if we use the *binomial test* function
+
+```{r}
+binom.test( 15, 60, 1/6, alternative = "greater" )
+```
+### Luck or foul play?
+
+What if we see 25 times a six in our 60n throws?
+
+```{r}
+sum( dbinom( 25:60, 60, 1/6 ) )
+```
+
+If our opponent got 15 sixes (p=0.065), we might believe that he was lucky, but if he got
+25 sixes (p=0.0000042), we would be justified in being quite sure that he cheated.
+
+Here are the p values for various outcomes
+
+```{r message=FALSE}
+library(tidyverse)
+```
+
+```{r}
+tibble( min_num_of_sixes = 0:60 ) %>%
+   mutate( probability = pbinom( min_num_of_sixes, 60, 1/6, lower.tail=FALSE ) ) %>%
+ggplot() +
+   geom_point( aes( x = min_num_of_sixes, y = probability) ) + 
+   scale_y_log10()
+```
+
+When do we start supecting that the die might be loaded? When are we sure? 
+
+Is $p<=0.05$ really a good threshold? Does this depend on the stakes? Or on our prior beliefs?
+
+See, e.g., [xkcd #1132](https://www.xkcd.com/1132/)
+
+
+## Correlation test
+
+
+One more example:
+
+We have two sets of numbers:
+
+```{r}
+x <- c(0.32, 0.39, 0.11, 0.6, 0.94, 0.27, 0.19, 0.66, 0.91, 0.41)
+y <- c(0.3, 0.77, 0.09, 0.76, 0.62, 0.19, 0.07, 0.89, 0.92, 0.39)
+```
+
+They seem correlated
+
+```{r}
+plot( x, y, asp=1 )
+```
+
+The Pearson correlation coefficient is
+
+```{r}
+cor( x, y )
+```
+
+Could such a high correlation coefficient arise by chance?
+
+If we shuffle one of the vectors, we should destroy the correlation
+
+```{r}
+cor( x, sample(y) )
+```
+
+But it won't be zero. What values should we expect to seet to arise by chance if we
+pair the values at random?
+
+```{r}
+hist( replicate( 10000, cor( x, sample(y) ) ) )
+```
+
+How many of these are above the correlation value we have seen above?
+
+```{r}
+mean( abs( replicate( 10000, cor( x, sample(y) ) ) ) > cor( x, y ) )
+```
+
+Note the `abs`, which removes the minus signs. We check whetehr the correlation is more extreme than
+the real ones to get a p value.
+
+R has, again, a way to calculate this number without having to try out thousands of correlations:
+
+```{r}
+cor.test( x, y )
+```
+
+
+# Further material (not tidied up yet)
+
+```
+
+# See xkcd #882 (jelly beans)
+
+# Sally Clark case (SIDS: 1/8500)
+
+
+# Now continuous data
+
+# Load NHANES again
+library( tidyverse )
+inner_join( 
+    haven::read_xpt( "NHANES/DEMO_I.XPT" ), 
+    haven::read_xpt( "NHANES/BMX_I.XPT" ), 
+    by="SEQN" ) %>%
+  select( 
+    subjectId = SEQN,
+    age = RIDAGEYR,
+    sex = RIAGENDR,
+    height = BMXHT,
+    weight = BMXWT,
+    ethnicity = RIDRETH3,
+    bornInUS = DMDBORN4,
+     ) %>%
+  mutate(
+    sex = fct_recode( factor(sex), male="1", female="2" ),
+    ethnicity = fct_recode( factor(ethnicity), mexican="1", hispanic="2",
+       white="3", black="4", asian="6", other="7" ),
+    bornInUS = fct_recode( factor(bornInUS), yes="1", no="2" ),
+  ) -> 
+    nhanes
+
+nhanes %>%
+   filter( age>20, sex=="male", ethnicity=="mexican",  !is.na(height) ) %>%
+ggplot + 
+   geom_density( aes( x=height, col=bornInUS ) )
+
+library(ggbeeswarm)
+
+nhanes %>%
+   filter( age>20, sex=="male", ethnicity=="mexican",  !is.na(height) ) %>%
+ggplot + 
+   geom_beeswarm( aes( y=height, x=bornInUS ) )
+
+nhanes %>%
+   filter( age>20, sex=="male", ethnicity=="mexican", bornInUS=="yes", !is.na(height) ) %>%
+   pull( height ) ->
+      height_A
+
+nhanes %>%
+   filter( age>20, sex=="male", ethnicity=="mexican", bornInUS=="no", !is.na(height) ) %>%
+   pull( height ) ->
+      height_B
+
+t.test( height_A, height_B )
+
+smplA <- sample( height_A, 20 )
+smplB <- sample( height_B, 20 )
+
+t.test( smplA, smplB )
+
+mean( sample( height_B, 20 ) ) - mean( sample( height_A, 20 ) )
+
+
+
+smplA <- sample( height_A, 50 )
+smplB <- sample( height_B, 50 )
+
+t.test( smplA, smplB )
+t.test( smplA, smplB, var.equal=TRUE )
+
+# our test statistic is
+t <- ( mean(smplB) - mean(smplA) ) / ( ( sd(smplA) + sd(smplB) )/2 )
+
+# common mean
+mu0 <- mean( c( smplA, smplB ) )
+mu0
+
+# SDs
+sd0 <- ( sd( smplA ) + sd( smplB ) )/2
+
+# Null hypothesis: The mean is the same in both groups
+# For example, like this:
+smplA0 <- rnorm( 50, mu0, sd0 )
+smplB0 <- rnorm( 50, mu0, sd0 )
+
+# test statistic for this null sample
+c( mean(smplB0) - mean(smplA0) ) / ( ( sd(smplA0) + sd(smplB0 ) )/2 )
+
+#What is the null distriution of our test statistic?
+t0 <- replicate( 10000, {
+   smplA0 <- rnorm( 50, mu0, sd0 )
+   smplB0 <- rnorm( 50, mu0, sd0 )
+   c( mean(smplB0) - mean(smplA0) ) / ( ( sd(smplA0) + sd(smplB0 ) )/2 )
+} )  
+
+hist(t0)
+
+t
+table( abs(t0) > abs(t) ) 
+mean( abs(t0) > abs(t) ) 
+
+
+# Alternative: Permutation test
+
+t0 <- replicate( 10000, {
+   smpl_AB0 <- sample( c( smplA, smplB ) )
+   smplA0 <- smpl_AB0[1:50]
+   smplB0 <- smpl_AB0[51:100]
+   c( mean(smplB0) - mean(smplA0) ) / ( ( sd(smplA0) + sd(smplB0 ) )/2 )
+} )  
+mean( abs(t0) > abs(t) ) 
+
+```

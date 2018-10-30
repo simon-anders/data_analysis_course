@@ -26,6 +26,6 @@ In this lecture, we carefully approach the topic of inference, and study the sta
 
 This lecture discussed Fisher test and binomial test to illustrate the idea behind p values
 
-Sorry, no HTML yet; still working on it.
+[HTML file](tests.html)  --  [Rmd file](tests.Rmd)
 
 For this lecture, I also have a [recording](https://www.youtube.com/watch?v=lg7-wBK9Cxw)
