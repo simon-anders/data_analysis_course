@@ -21,11 +21,19 @@ In this lecture, we carefully approach the topic of inference, and study the sta
 [HTML file](lecture2.html)  --  [Rmd file](lecture2.Rmd)
 
 
-
-### [Lecture 3](lecture2.html): Test statistics, p values and all that
+### [Lecture 3](lecture3.html): Test statistics, p values and all that
 
 This lecture discussed Fisher test and binomial test to illustrate the idea behind p values
 
 [HTML file](tests.html)  --  [Rmd file](tests.Rmd)
 
 For this lecture, I also have a [recording](https://www.youtube.com/watch?v=lg7-wBK9Cxw)
+
+
+### [Lecture 4](lecture2.html): t tests, Bayes theorem
+
+This lecture discussed the t test and Bayes theorem
+
+[HTML file](lecture4.html)  --  [Rmd file](lecture4.Rmd)
+
+Lecture [recording](https://www.youtube.com/watch?v=5Rqwa18QifM)
