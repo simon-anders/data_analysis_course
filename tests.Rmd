@@ -388,6 +388,7 @@ causes and convicted her for murder. Two subsequent SIDS cases have very low pro
 millions of babies are born every year in Europe, we should fully expect that once in a while, a mother suffers this fate twice, 
 without concluding that she must be a murderer. Hence, even an extremely low p value can be misleading.
 
+We will have to discuss much more about these issues.
 
 # Further material (not tidied up yet)
 

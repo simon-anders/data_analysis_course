@@ -37,3 +37,22 @@ This lecture discussed the t test and Bayes theorem
 [HTML file](lecture4.html)  --  [Rmd file](lecture4.Rmd)
 
 Lecture [recording](https://www.youtube.com/watch?v=5Rqwa18QifM)
+
+
+
+<!-- Default Statcounter code for Data analysis course
+https://simon-anders.github.io/data_analysis_course/ -->
+<script type="text/javascript">
+var sc_project=11861680; 
+var sc_invisible=1; 
+var sc_security="52b97ecc"; 
+</script>
+<script type="text/javascript"
+src="https://www.statcounter.com/counter/counter.js"
+async></script>
+<noscript><div class="statcounter"><a title="free hit
+counter" href="http://statcounter.com/" target="_blank"><img
+class="statcounter"
+src="//c.statcounter.com/11861680/0/52b97ecc/1/" alt="free
+hit counter"></a></div></noscript>
+<!-- End of Statcounter Code -->
