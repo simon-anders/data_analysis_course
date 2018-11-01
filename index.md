@@ -30,7 +30,7 @@ This lecture discussed Fisher test and binomial test to illustrate the idea behi
 For this lecture, I also have a [recording](https://www.youtube.com/watch?v=lg7-wBK9Cxw)
 
 
-### [Lecture 4](lecture2.html): t tests, Bayes theorem
+### [Lecture 4](lecture4.html): t tests, Bayes theorem
 
 This lecture discussed the t test and Bayes theorem
 
