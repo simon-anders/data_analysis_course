@@ -39,7 +39,7 @@ This lecture discussed the t test and Bayes theorem
 Lecture [recording](https://www.youtube.com/watch?v=5Rqwa18QifM)
 
 
-### [Lecture 5](lecture5.html): t tests, Bayes theorem
+### [Lecture 5](lecture5.html): Analysing plate-reader data
 
 This lecture shows an end-to-end analysis of a drug perturbation experiment on primary lymphoma cells.
 
