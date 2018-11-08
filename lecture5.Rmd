@@ -1,0 +1,393 @@
+---
+title: 'SFB 1036 Course on Data Analysis: Lesson 5'
+author: "Simon Anders"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Exploring data from a drug perturbation experiment in 384-well format
+
+### The experiment
+
+This is data curtesy of Tobias Roider from [Sascha Dietrich](https://www.embl.de/mmpu/mmpu/research_groups/systems_medicine_of_cancer_drugs/index.html)'s group at [MMPU](https://www.embl.de/mmpu/mmpu/). For a small pilot study, Tobias took primary
+cell samples from the lymph nodes of five patients suffering from lymphoma. He spread
+the cells from each patient over one 384-well plate and copied aliquots from a drug 
+master plate over these, incubated them, then checked the number of remaining viable 
+cells in each well with a flourescence-based ATP-sensitive readout. 
+We have six files, five CSV from the plate reader, and one Excel file with the
+information on the layout of the drug master plate.
+
+If you want to redo this analysis, you can find the six files here: [lymphoma_data.zip]](lymphoma_data.zip).
+
+# Reading in the plate files.
+
+Before continuing, open one of the CSV files in an arbitrary text editor and
+study their content. Note that the payload data starts with the 6th line and
+takes 15 lines.
+
+If we only want to read in this block of 15 lines, we can use
+
+```{r}
+library( tidyverse )
+
+read_csv( "Patient_1.csv", skip=5, n_max=16 )
+```
+
+To make it easier to work with this data, we transform it from a wide table to a long table. In 
+a "long table" (or, "tidy table" in the tidyverse nomenclature), every table row contains only data
+on one "object". (Here, each well is an object.)
+
+```{r}
+read_csv( "Patient_1.csv", skip=5, n_max=16 ) %>%
+   rename( "plate_row" = "X1") %>%
+   gather( "plate_col", "intensity", -plate_row )
+```
+
+Such a table is useful, for example, for plotting with ggplot:
+
+```{r}
+read_csv( "Patient_1.csv", skip=5, n_max=16 ) %>%
+   rename( "plate_row" = "X1") %>%
+   gather( "plate_col", "intensity", -plate_row ) %>%
+ggplot +
+   geom_tile( aes( x = plate_col, y = plate_row, fill = intensity ) ) 
+```
+
+The plate is not rendered in the right order. Let's fix this by reversing the rows and making clear to R that
+the columns should be sorted as numbers, not by alphabet. Also, let's use log2 values for intensity and
+add white borders to the tiles. The `coord_fixed` ensures that x and y axis are scaled the same and hence the
+wells appear as squares.
+
+```{r}
+read_csv( "Patient_1.csv", skip=5, n_max=16 ) %>%
+   rename( "plate_row" = "X1") %>%
+   gather( "plate_col", "intensity", -plate_row ) %>%
+   mutate( plate_row = fct_rev( plate_row) ) %>%
+   mutate( plate_col = as.integer(plate_col) ) %>%
+ggplot +
+   geom_tile( aes( x = plate_col, y = plate_row, fill = log2(intensity) ), color="white" ) +
+   coord_fixed()
+
+```
+
+
+We want to work with all 5 plates, to let's write a function which takes a patient number,
+read the file and produces a long table
+
+```{r}
+read_plate <- function( patient_number ) {
+   filename <- str_c( "Patient_", patient_number, ".csv" )
+   read_csv( filename, skip=5, n_max=16 ) %>%
+   rename( "plate_row" = "X1") %>%
+   gather( "plate_col", "intensity", -plate_row ) %>%
+   mutate( plate_col = as.integer(plate_col) ) %>%
+   add_column( plate_number = patient_number, .before="plate_row" )
+}
+```
+
+We can call this function with a number
+
+```{r}
+read_plate( 2 )
+```
+
+We want to call this function for all five patients, i.e., for each of these values:
+
+```{r}
+1:5
+```
+
+(`1:5` just returns the numbers from 1 to 5.)
+
+The `map_dfr` function calls a given function for each element, expects this function to
+return a data frame (i.e., a table or tibble) and then combined all the returned tables 
+row-wise (i.e., one below the other). There is also  `map_dfc`, which combnines them column-wise 
+(i.e., side-by-side). We use it to call our `read_plate` function for all five plates.
+
+```{r}
+tbl <- map_dfr( 1:5, read_plate )
+tbl
+```
+
+Now, we have all data in hand and can plot one big overview plot
+
+```{r fig.width=11, fig.height=5}
+tbl %>%
+   mutate( plate_row = fct_rev( plate_row ) ) %>%
+ggplot +
+   geom_tile( aes( x = plate_col, y = plate_row, fill = log2(intensity) ), color="white" ) +
+   facet_wrap( ~ plate_number ) + coord_fixed()
+```
+
+## Plate annotation
+
+Next, let's read in the Excel file with the well annotation
+
+```{r}
+readxl::read_excel( "PlateAnnotation.xlsx" )
+```
+
+As this is data from an unpublished experiment, we did not want to make the content of the drug master plate
+public. Therefore, I have replaced all the drug names in the "Drug" column with names of fruits 
+from [this list](https://simple.wikipedia.org/wiki/List_of_fruits), only leaving the value "DMSO" as it was.
+
+Apart from now having strange drug names, the table is a bit redundant, an has lengthy column names. Let's
+clean this up a bit:
+
+```{r}
+readxl::read_excel( "PlateAnnotation.xlsx" ) %>%
+   select( 
+      plate_row = Row,
+      plate_col = Column,
+      drug = Drug,
+      conc_level = Drug_Concentration,
+      conc_uMol = Conc_mikroMolar ) %>%
+   mutate( conc_uMol = as.numeric( conc_uMol ) ) %>%
+   mutate( plate_col = as.integer(plate_col) ) ->
+      layout
+layout
+```
+
+## Checking the control wells
+
+Where are the control wells?
+
+```{r}
+layout %>%
+mutate( plate_row = fct_rev( plate_row ) ) %>%
+ggplot +
+   geom_tile( aes( x=plate_col, y=plate_row, fill=(drug=="DMSO") ) ) + 
+   coord_fixed()
+```
+
+As you can see, care was taken to spread the control wells over the whole plate. This
+helps to check for spatial artifacts, as we will see in a minute.
+
+How equal are the control wells? Let's plot their intensity.
+
+```{r fig.width=11, fig.height=5}
+tbl %>%
+   left_join( layout ) %>%
+   filter( drug == "DMSO" ) %>%
+   mutate( plate_row = fct_rev( plate_row ) ) %>%
+ggplot +
+   geom_tile( aes( x = plate_col, y = plate_row, fill = log2(intensity) ), color="white" ) +
+   facet_wrap( ~ plate_number ) + coord_fixed()
+```
+
+We mainly see differences between plates, but we want to see heterogeneity within
+the plates. To make this more visible, let's divide the DMSO control wells of 
+each plate by their median DMSO intensity, to get relative intensity wells
+(relative to the plate control median), so we call this new columns `rel_int`.
+
+We also use the `scale_fill_gradient2`
+function to get a diverging color scale, centered at zero with white and showing
+gradients towards red for negative and towards blue for positive values. Such a
+diverging colour scale should always be used when visualizing data spreading around zero.
+As it would be nice to have the colour scale labelled on a natural scale, we replace
+`fill=log2(rel_int)` with simply `fill=rel_int` in the `aes` phrase, and instead 
+specify the transformation in the colour scale specification: `trans="log2"`.
+
+
+```{r fig.width=11, fig.height=5}
+tbl %>%
+   left_join( layout ) %>%
+   filter( drug == "DMSO" ) %>%
+   group_by( plate_number ) %>%
+   mutate( rel_int = intensity / median( intensity ) ) %>%
+   mutate( plate_row = fct_rev( plate_row ) ) %>%
+ggplot +
+   geom_tile( aes( x = plate_col, y = plate_row, fill = rel_int ), color="white" ) +
+   facet_wrap( ~ plate_number ) + coord_fixed() +
+   scale_fill_gradient2( trans="log2")
+```
+
+The one outlier on plate 4 has caused ggplot to choose very wide limits for the colour scale, making the other points very pale. Hence, we specify the limits manually (`limits=c(.7,1.3)`), and instruct ggplot
+to "squish" values outside these limits, i.e., to give them the colour of the limit. Unfortunately,
+ggplot's automatic tic marking system fails here (producing ony a single tic mark for "1"), so we
+also have to specify the tics manually (`breaks`).
+
+```{r fig.width=11, fig.height=5}
+tbl %>%
+   left_join( layout ) %>%
+   filter( drug == "DMSO" ) %>%
+   group_by( plate_number ) %>%
+   mutate( rel_int = intensity / median( intensity ) ) %>%
+   mutate( plate_row = fct_rev( plate_row ) ) %>%
+ggplot +
+   geom_tile( aes( x = plate_col, y = plate_row, fill = rel_int ), color="white" ) +
+   facet_wrap( ~ plate_number ) +
+   scale_fill_gradient2( trans="log2", limits=c(.7,1.3), oob=scales::squish, 
+      breaks=c( .7, .8, .9, 1, 1.1, 1.2, 1.3 ) ) + 
+   coord_fixed() +
+   theme( panel.background = element_rect("darkgray"), panel.grid = element_blank() )
+```
+
+Is this spread small enough to ignore the spatial artifacts? This may be easier to 
+judge using a beeswarm plot.
+
+```{r}
+tbl %>%
+   left_join( layout ) %>%
+   filter( drug == "DMSO" ) %>%
+   group_by( plate_number ) %>%
+   mutate( rel_int = intensity / median( intensity ) ) %>%
+ggplot +
+   ggbeeswarm::geom_beeswarm( aes( x = plate_number, y = rel_int ) ) +
+   scale_y_continuous( trans="log2", breaks = seq( 0, 2, by=.1 ) )
+```
+
+## Drug response curves
+
+Enough looking at control wells
+
+Let's just use the median of each plate's control wells as normalization reference
+
+```{r}
+tbl %>%
+   left_join( layout ) %>%
+   filter( drug=="DMSO" ) %>%
+   group_by( plate_number ) %>%
+   summarise( median_dmso_intensity = median( intensity ) ) ->
+      ctrl_int_tbl
+ctrl_int_tbl
+```
+
+Now, use this to normalize our data
+
+```{r}
+tbl %>% 
+   left_join( layout ) %>%
+   left_join( ctrl_int_tbl ) %>%
+   mutate( rel_int = intensity / median_dmso_intensity ) ->
+      tbl2
+tbl2
+```
+   
+Let's plot one drug, say "Passionfruit"
+
+```{r}
+tbl2 %>%
+   filter( drug == "Passionfruit") %>%
+   mutate( plate_number = str_c( "Patient_", plate_number ) ) %>%
+ggplot +
+   geom_line( aes( x = conc_uMol, y = rel_int, col = plate_number ) ) +
+   scale_x_log10()
+```
+
+By putting a `for` loop around these commands, we can make a PDF file with one such plot
+per page, one for each drugs.
+
+We first get the names of all drugs
+
+```{r}
+layout %>%
+   filter( drug != "DMSO" ) %>%
+   pull( "drug" ) %>%
+   unique ->
+      drugs
+drugs
+```
+
+Now, we open a PDF file for writing (`pdf`), run the `for` loop, and close the PDF file 
+(`dev.off`). The `pdf` command means that all subsequent plotting commands should result in the 
+produced plot not being displayed on the screen as usual but rather added as a new page
+to the PDF file until this rerouting is switched off again with `dev.off`.
+
+The for loop runs its body (the part in curly braces) once each of the drugs 
+in the vector `drugs`, by putting the value of each drug into the variable `dr` (`for ( dr in drugs )`)
+and then runs the commands. These produce one plot. Whenever you use ggplot within a function
+or a block, you have to surround the whole ggplot command with parenthesis and hand it to `print`
+(for reasons we dobn't want to go into now), as otherwise nothing gets plotted.
+
+```{r}
+
+# start a PDF file
+pdf( "dose_resp_curves.pdf" )
+
+# Go through the list of drugs
+for( dr in drugs ) {
+   (tbl2 %>%
+      filter( drug == dr ) %>%
+      mutate( plate_number = str_c( "Patient_", plate_number ) ) %>%
+   ggplot +
+      geom_line( aes( x = conc_uMol, y = rel_int, col = plate_number ) ) +
+      scale_x_log10() +
+      ggtitle( dr ) ) %>% print
+}
+
+# close the PDF
+dev.off()
+```
+
+You can look at the PDF thus produced here: [dose_resp_curves.pdf](dose_resp_curves.pdf)
+
+
+## Getting AUC values
+
+For each drug and each patient, we have five response values in the `rel_int` column, namely the responses to the
+five concentrations in which the drug is present on the master plate. Let us simply average over these to get one
+single value. In a way, this is roughly the same as calculating the area under the dose response curve.
+
+```{r}
+tbl2 %>%
+   filter( drug != "DMSO" ) %>%
+   group_by( plate_number, drug ) %>%
+   summarise( mean_viab = mean( rel_int ) )
+```
+
+We can use the `spread` fucntion to turn this long table into a wide table. This is the opposite of
+`gather`, which we have used further up to turn a wide table into a long one. Hence we add one line to 
+the previous code chunk. 
+
+```{r}
+tbl2 %>%
+   filter( drug != "DMSO" ) %>%
+   group_by( plate_number, drug ) %>%
+   summarise( mean_viab = mean( rel_int ) ) %>%
+   spread( plate_number, mean_viab )
+```  
+
+To plot this as a heatmap, we have to turn it from a tidyverse tibble into a matrix, because the
+heatmap plotting functions of R don't work well with tidyverse objects. The `as.matrix`
+function does this. Before, we turn the column with the drug names into row names for
+the matrix, so that the matrix itself contains only numbers.
+
+```{r}
+tbl2 %>%
+   filter( drug != "DMSO" ) %>%
+   group_by( plate_number, drug ) %>%
+   summarise( mean_viab = mean( rel_int ) ) %>%
+   spread( plate_number, mean_viab ) %>%
+   column_to_rownames( "drug" ) %>%
+   as.matrix ->
+      responseMatrix
+
+responseMatrix[ 1:10, ]
+```   
+
+Now, we can use the `pheatmap` function from Raivo Kolde's "pretty heatmaps"
+package to make our heatmap. Have a look at the help page for `pheatmap`
+to see its many options. We just use one, to tell it to perform hierarchical
+clustering on our drugs not using the usual Euclidean distance but correlation
+distance, which works better for drug response data.
+
+```{r fig.height=10, fig.width=5}
+library( pheatmap )
+pheatmap( responseMatrix, clustering_distance_rows = "correlation" )
+```
+
+We can also look directly at the correlation matrix. In earlier lessons, we
+have used the `cor` function to calculate the correlation between to vectors.
+Here, we give it a matrix, and it calculates a matrix of correlations between
+all the matrix columns. As we want to see the correlation between rows, we
+have to transpose the matrix first, with `t`.
+
+```{r fig.height=10,fig.width=12}
+pheatmap( cor( t(responseMatrix) ) )
+```
+
+This correlation heatmap is quite noisy, simply because we have samples from only five patients. However, even now, you would see (if you had the real
+drug names instead of fruit names) that the red squares along the diagonal tend to correspond to drugs with related mode of action. A somewhat larger
+cohort can hence give a surprising amount of details. See, e.g., Figure 3 of [this paper by Dietrich et al.](http:doi.org/10.1172/JCI93801).

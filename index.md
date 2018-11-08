@@ -39,6 +39,15 @@ This lecture discussed the t test and Bayes theorem
 Lecture [recording](https://www.youtube.com/watch?v=5Rqwa18QifM)
 
 
+### [Lecture 5](lecture5.html): t tests, Bayes theorem
+
+This lecture shows an end-to-end analysis of a drug perturbation experiment on primary lymphoma cells.
+
+[HTML file](lecture5.html)  --  [Rmd file](lecture5.Rmd)
+
+Lecture [recording](https://www.youtube.com/watch?v=olEQIRasSSc)
+
+
 
 <!-- Default Statcounter code for Data analysis course
 https://simon-anders.github.io/data_analysis_course/ -->
