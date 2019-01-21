@@ -48,6 +48,29 @@ This lecture shows an end-to-end analysis of a drug perturbation experiment on p
 Lecture [recording](https://www.youtube.com/watch?v=olEQIRasSSc)
 
 
+### [Lecture 6](lecture6.html): RNA-Seq data analysis: Preprocessing
+
+This lecture shows how to get from RNA sequencing data to a count table
+
+[HTML file](lecture6.html)  --  [Rmd file](lecture6.Rmd)
+
+Lecture 6 [recording](https://youtu.be/tULYFW2XXpM) 
+
+
+### [Lecture 7/8](lecture8.html): RNA-Seq data analysis: Downstream analysis
+
+[HTML file](lecture8.html)  --  [Rmd file](lecture8.Rmd)
+
+Lecture 7 [recording](https://youtu.be/UGQJEmo1yPY) and 
+Lecture 8 [recording](https://www.youtube.com/watch?v=eXUOHSsqP18)
+
+
+### [Lecture 9](lecture9.html): RNA-Seq data analysis: Gene set enrichment etc
+
+[HTML file](lecture9.html)  --  [Rmd file](lecture9.Rmd)
+(preliminary)
+
+
 
 <!-- Default Statcounter code for Data analysis course
 https://simon-anders.github.io/data_analysis_course/ -->
