@@ -1,0 +1,263 @@
+---
+title: 'SFB 1036 Course on Data Analysis: Lesson 9'
+author: "Simon Anders"
+output:
+  html_document:
+    df_print: paged
+---
+
+We load the saved data from last time
+
+```{r}
+library( tidyverse )
+read( "lecture8.rda" )
+```
+   
+# Gene Set Enrichment
+
+Here are all the upregulated genes
+
+
+What do all the significantly upregulated genes have in common? Are certain groups of genes
+overrepresented among them? The `clusterProfiler` package (Yu et al., [Omics 16:284](http://doi.org/10.1089/omi.2011.0118), 2012) allows us to compare with many data bases of gene
+groups ("categories"). 
+```{r}
+library( clusterProfiler )
+```
+
+Let's start with the most popular of these group collections, the Gene Ontology ([Nucl Acid Res, 45:D331](http://doi.org/10.1093/nar/gkw1108), 2017). It is divided into three sub-ontologies, for
+cellular components ("CC"), molecular functions ("MF"), and biological processes ("BP"). The assignment
+of human genes to the GO catogies is one of the many gene annotation information in Bioconductor's
+Homo sapients organism database package
+
+```{r}
+library( org.Hs.eg.db )
+```
+
+We can ask clusterProfiler to check for enrichment of the significantly upregulated genes in the
+CC sub-ontology:
+
+```{r}
+res %>%
+   filter( signif, log2FoldChange > 0 ) %>%
+   pull( "EnsemblID" ) %>%
+   enrichGO(
+      OrgDb = org.Hs.eg.db,
+      keyType = 'ENSEMBL',
+      ont = "CC",
+      universe = ( res %>% filter( !is.na(padj) ) %>% pull( "EnsemblID" ) ) ) ->
+    egoCC
+
+egoCC
+```
+
+About the `universe` option: This is the list of all genes for whcih we had enought data to actually test for differential expression. We use thse for which an adjusted p value has been reported. This
+is non-obvious, and we will have to discuss p-value adjustment and independent hypothesis filtering before explaining.
+
+clusterProfile offers several visualization methods. Here is one:
+
+```{r}
+dotplot(egoCC)
+```
+
+GO categories are organized in a [DAG](https://en.wikipedia.org/wiki/Directed_acyclic_graph), so, we should look at that, too:
+
+```{r}
+goplot( egoCC )
+```
+
+Be sure to check out the [clusterProfiler vignette](https://www.bioconductor.org/packages/release/bioc/vignettes/clusterProfiler/inst/doc/clusterProfiler.html) to learn more about the package's possibilities:
+
+```{r eval=FALSE}
+openVignette( "clusterProfiler" )
+```
+
+Let's look at one, `emapplot`, which shows us how much overlap there is between related categories
+
+```{r}
+emapplot( egoCC )
+```
+
+Also, don't forget to also check enrichment for the other two sub-ontologies, and for
+the down-regulated gene.
+
+There are other useful gene categories, for example the Moleculare Signature Database (MSigDb) (Liberson et al., [Bioinformatics, 27:1739](https://doi.org/10.1093/bioinformatics/btr260), 2011), and within it,
+the Hallmark Gene Set Set Collection (Liberzon et al., [Cell Systems, 1:417](https://doi.org/10.1016/j.cels.2015.12.004), 2015)
+
+Let's download the Hallmark collection from the [MsigDb web page](http://software.broadinstitute.org/gsea/msigdb/collections.jsp). It's the file `h.all.v6.2.symbols.gmt`. As always, have a look at the file first. You'll notice that each line starts with the name of a gene set, followed by a web link to a description and then a list of gene names.
+
+The `read.gmt` function  of clusterProfiler can read such files.
+
+```{r}
+gmtH <- read.gmt( "RNASeq/airway/h.all.v6.2.symbols.gmt" )
+head(gmtH)
+```
+
+Instead of the `enrichGO` function, we now use clusterProfiler's more generic `enricher` function:
+
+```{r}
+enrH <- enricher(
+   gene = ( res %>% filter( signif & log2FoldChange>0 ) %>% pull( "Gene name" ) ),
+   TERM2GENE = gmtH,
+   universe = ( res %>% filter( !is.na(padj) ) %>% pull( "Gene name" ) )
+)
+
+dotplot( enrH )
+```
+
+NEXT: Do we believe that? Do it by hand.
+
+```{r}
+gmtH %>%
+   filter( ont == "HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION" ) %>%
+   pull( gene ) ->
+      emtGenes
+```
+
+```{r}
+res %>%
+ggplot( ) +
+   geom_point(
+      aes(
+         x = baseMean,
+         y = log2FoldChange,
+         col = interaction(
+            signif,
+            `Gene name` %in% emtGenes )
+      )
+   ) +
+   scale_x_log10() +
+   scale_y_continuous( oob = scales::squish )
+```
+
+Explaining the test:
+
+```{r}
+res %>%
+   filter( !is.na( padj ) ) %>%   # universe
+   mutate( 
+      signifUp = signif & log2FoldChange > 0,
+      emtGene = `Gene name` %in% emtGenes ) %>%
+   group_by( signifUp, emtGene ) %>%
+   tally() %>%
+   spread( emtGene, n ) %>%
+   column_to_rownames( "signifUp" ) %>%
+   fisher.test
+```
+
+## LFC Shrinkage
+
+Which genes react most strongly to dexamethasone? Not necessarily the ones at the top of the MA plot:
+
+```{r}
+plotMA( results(dds), ylim = c( -6, 6 ) )
+```
+
+This is because fold changes are exaggerated for weakly expressed or otherwise variable genes. We can
+compensate by shrinking the reported log fold changes to "trade bias for variance". We will discuss this in more
+detail next time.
+
+```{r}
+res2 <- lfcShrink( dds, coef = "dexamethasoneTRUE", type = "apeglm" )
+
+res2
+```
+```{r}
+plotMA( res2, ylim = c( -6, 6 ) )
+```
+
+Let's look at the new top genes
+
+```{r}
+res2 %>%
+   as_tibble( rownames = "EnsemblID" ) %>%
+   left_join( 
+      read_tsv( "RNASeq/airway/mart_export.txt" ),
+      by = c( "EnsemblID" = "Gene stable ID" ) ) %>%
+   arrange( -log2FoldChange )
+```
+
+We can also redo our interactvie plot
+
+```{r}
+openPage( useViewer=FALSE, layout="table2x2" )
+
+lc_scatter(
+   dat(
+      x = res2$baseMean,
+      y = res2$log2FoldChange,
+      colorValue = !is.na(res2$padj) & res2$padj < .1,
+      label = res2$`Gene name`,
+      on_click = function(k) { gene <<- k; updateCharts("A2") }
+   ),
+   place = "A1",
+   logScaleX = 10,
+   size = 2,
+   colourLegendTitle = "significant"
+)
+
+lc_scatter(
+   dat(
+      x = colData(dds)$cell_line,
+      y = log10( 1 + counts( dds, normalized=TRUE )[ gene, ] ),
+      colourValue = colData(dds)$treatment
+   ),
+   place = "A2",
+   domainY = c( 0, 5 )
+)
+```
+
+How about now using just the genes with LFC > 2 in an GO enrichment analysis?
+
+```{r}
+res2 %>%
+   as_tibble( rownames = "EnsemblID" ) %>%
+   filter( log2FoldChange > 2 ) %>%
+   pull( "EnsemblID" ) %>%
+   enrichGO(
+      OrgDb = org.Hs.eg.db,
+      keyType = 'ENSEMBL',
+      ont = "CC",
+      universe = ( res %>% filter( baseMean > 8 ) %>% pull( "EnsemblID" ) ) ) ->
+    egoCC2
+
+egoCC2
+```
+
+How about the hallmark set?
+
+```{r}
+res2 %>%
+   as_tibble( rownames = "EnsemblID" ) %>%
+   filter( log2FoldChange > 2 ) %>%
+   left_join( 
+      read_tsv( "RNASeq/airway/mart_export.txt" ),
+      by = c( "EnsemblID" = "Gene stable ID" ) ) %>%
+   pull( "Gene name" ) %>%
+   enricher(
+      TERM2GENE = gmtH,
+      universe = ( res %>% filter( baseMean > 8 ) %>% pull( "Gene name" ) ) ) ->
+    egoH2
+
+egoH2
+```
+
+Instead of a Fisher test, we can also do a Kolmogorov-Smirnov-style test,
+which is independent of a threshold, by ranking the genes by shrunken fold change.
+
+```{r}
+res2 %>%
+   as_tibble( rownames = "EnsemblID" ) %>%
+   filter( baseMean > 8 ) %>%
+   left_join( 
+      read_tsv( "RNASeq/airway/mart_export.txt" ),
+      by = c( "EnsemblID" = "Gene stable ID" ) ) %>%
+   arrange( -log2FoldChange ) %>%
+   dplyr::select( `EnsemblID`, log2FoldChange ) %>%
+   deframe %>%
+gseGO( OrgDb = org.Hs.eg.db,
+   keyType = 'ENSEMBL',
+   ont = "CC",
+   nPerm = 1000 ) ->
+     gseCC
+```
