@@ -1,101 +1,167 @@
----
-title: 'SFB 1036 Course on Data Analysis: Lessons 6+7'
-author: "Simon Anders"
-output:
-  html_document:
-    df_print: paged
----
+Example data
+------------
 
-# RNA-Seq data processing
+We use data from this study:
+  
+Himes et al.: *RNA-Seq transcriptome profiling identifies CRISPLD2 as a glucocorticoid responsive gene that modulates cytokine function in airway smooth muscle cells.* [PLoS One, 2014, 9:](doi.org://10.1371/journal.pone.0099625).
 
-This lessons shows how to preprocess RNA-Seq data, and how to do an initial analysis.
+They have derived cell lines from airway smooth muscle cells obtained from the airways of four human donors, and tested the effect of two drugs, dexamathasone and albuterol on the trabnscriptome. For each cell line, they have four RNA-Seq samples, one for each of the four experimental conditons of treatment with dexamethasone, with albnuterol, with both and with neither drug.
 
-## Downloading the example data
+Demamethasone is a synthetic glucocorticoid, and albuterol (a.k.a. salbutamol) is a bronchodilator, which is used e.g., in astma inhalers.  It is  an agonist of the β2 adrenoreceptor, which mediates relaxation of smooth muscle cells.
 
-Our example data today is from a study on oral squamous cell carcinoma (OSCC) by 
-Conway et al. ([Oncotarget 6:40186](https://doi.org/10.18632/oncotarget.5529), 2015). They performed
-RNA-Seq on samples from 19 patients. From each patient, they had three samples, one of the tumour ("T"), one
-of dysplasia (pre-malignant tissue, "D") and one from healthy oral mucosa ("H"). They submitted their raw 
-sequencing data to the European Nucleotide Archive ([ENA](https://www.ebi.ac.uk/ena)) under accession
-"PRJEB7455".
+The sequencing reads from the 16 sequencing libraries have been deposited by the authors at the [Gene Expression Omnibus](https://www.ncbi.nlm.nih.gov/geo/) under accession number GSE52778. Finding the actual reads requries a bit of clickling around in the maze that is
+GEO and SRA, and leads us eventually to Short read Archive (SRA) accession [SRP033351](https://www.ncbi.nlm.nih.gov/sra?term=SRP033351). Clicking there on the link "Send to Run Selector", we can download the "Runinfo Table"
 
-We first get a sample table from ENA: Open https://www.ebi.ac.uk/ena/data/view/PRJEB7455, and click 
-on "Select columns". We will need the column "Run accession" with the sequencing libraries' accession 
-numbers, the column "FASTQ file (FTP)" with the links to download the FASTQ files, and the "Submitter's sample name".
-We download the table and load it in R
+We load this table in R
 
 ```{r}
 library( tidyverse )
-sampleTable <- read_tsv( "RNASeq/PRJEB7455.txt")
-
-sampleTable
 ```
-A close look at the table reveals a mistake in the column `fastq_ftp`: It show contain two files for
-each run (because these are paired-end sequencing runs), one with `_1.fastq` and one with `_2.fastq`. For
-four of the runs, there is a superfluous third file, without `_1` and `_2`. These can be removed with a text editor. Also, we notice that all URLs have the same form, and can be formed from the run accession:
 
 ```{r}
-run_acc <- "ERR649018"
-str_c( "ftp://ftp.sra.ebi.ac.uk/vol1/fastq/ERR649/", run_acc, "/", run_acc, "_1.fastq.gz")
+read_tsv( "run_table.txt" )
 ```
 
-A convenient way to download many files is to use the `wget` command on
-the shell command line. (The shell, not R!). We can use R to produce the necessary command:
+This is just a table with one row per library and many columns with various relevant and less relevant information on the libraries. Most important for us are the columns `cell_line` and `treatment`, as they contain the experimental conditions, as well as the `Run` accession number, which is the ID under which we can download the data from the Short Read Archive (SRA).
 
 ```{r}
-for( run_acc in sampleTable$run_accession ) {
-   cat( str_c( "wget ftp://ftp.sra.ebi.ac.uk/vol1/fastq/ERR649/", run_acc, "/", run_acc, "_1.fastq.gz\n") )
-   cat( str_c( "wget ftp://ftp.sra.ebi.ac.uk/vol1/fastq/ERR649/", run_acc, "/", run_acc, "_2.fastq.gz\n") )
-}
-```
-Here, we have used `cat`, to simply print the string onto the screen, without any 
-quotation marks or other extras. You have to tell `cat` to break the line at the
-end, by adding `"\n"`. Otherwise all will appear in one long line.
+read_tsv( "run_table.txt" ) %>%
+  select( Run, cell_line, treatment ) -> run_table
 
-Now, you can copy and paste this into a terminal window and let it run overnight,
-until everything is downloaded. Make sure to have lots of space on your hard disk 
-if you do that: Each file is more than 1 GB. Or just download a few of the files to see
-some examples how they look.
-
-Use the `less` command (again, this is the command line, not R) to inspect a few 
-of the files, and read up about the [FASTQ format](https://en.wikipedia.org/wiki/FASTQ_format) to understand what you are
-looking at. Ths is what you would also get from a core facility.
-
-
-## Aligning the data
-
-Next, we need to align the reads to the human genome reference. We will use the [*Subread* aligner](http://subread.sourceforge.net/) by Liao et al. ([Nucl Acid Res, 41:e108](http://doi.org:10.1093/nar/gkt214), 2013).
-Install it. On Ubuntu Linux, you simply type `sudo apt install subread`. For other other operating systems,
-installation should not be much more difficult.
-
-Now, we need to download the Human genome, e.g. from the [Ensembl download page](http://www.ensembl.org/info/data/ftp/index.html).
-We use the "primary assembly" of GRCh38 (Genome Reference Consortium, human genome, release 38), which you find
-in the "DNA (FASTA)" column: 
-
-ftp://ftp.ensembl.org/pub/release-95/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
-
-Unpack the compressed file
-
-```
-gunzip Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz 
+run_table
 ```
 
-the build the index:
 
-```
-subread-buildindex -M 6000 -o GRCh38.subread_index Homo_sapiens.GRCh38.dna.primary_assembly.fa 
-```
+Downloading the reads
+---------------------
 
-This last command takes a bit more than half an hour on my laptop. My laptop has 8 GB of RAM,
-hence I told Subread with the option `-M 6000` that it can use a good part of it. The index consists 
-of several files, with file names all starting with `GRCh38.subread_index`, as specified with `-o`.
+To download the read, we need the utility "`fastq-dump`" from the SRA Toolkit. So, we first need to download the [SRA Toolkit](https://www.ncbi.nlm.nih.gov/sra/docs/toolkitsoft/) from the NCBI web site, and install it. Then, we can write in the command line a command like
 
-Have a good look at the [Subread User Guide](http://bioinf.wehi.edu.au/subread-package/SubreadUsersGuide.pdf) 
-for more detailed usage instructions.
-
-To align files to the index that we have just constructed we can use, e.g.
-
-```
-subread-align -i GRCh38.subread_index -r ERR649018_1.fastq -R ERR649018_2.fastq -o ERR649018.bam -t 0 -T 8
+```sh
+fastq-dump --split-files SRR1039508
 ```
 
+The option `--split-files` is required because these are paired-end libraries, and we need to download two files for each run. The above command will produce two FASTQ files, named `SRR1039508_1.fastq` and `SRR1039508_2.fastq`, with the reads of the 5' and the 3' ends of each cDNA fragment. 
+
+We can write a simple R command to produce `fastq-dump` commands for all 16 files.
+
+```{r}
+str_c( "fastq-dump --split-files ", run_table$Run, " &\n" ) %>% cat
+```
+
+You can copy and paste these commands into your shell. The ampersand (`&`) will cause all commands to start at the same time. After several hours, you will have all the files.
+
+Here is how the first 12 lines of one such file loook like
+
+```
+$ head -12  SRR1039512_1.fastq
+@SRR1039512.1 HWI-ST177:314:C12K6ACXX:1:1101:1207:2192 length=63
+ACGACAGGTCATCGTTCAAGCAGAATGCAGACAGGCCATTCACGAGCCCAAGTTGAAGAGAAG
++SRR1039512.1 HWI-ST177:314:C12K6ACXX:1:1101:1207:2192 length=63
+FBDEFIDH2AGHIICDHGBDDFGGGDH<FFEA;FH=;BGGA@DFGB<EEE=??CCC>C>;=A?
+@SRR1039512.2 HWI-ST177:314:C12K6ACXX:1:1101:1206:2234 length=63
+GGTGAGGGACTGAGGCCCCTAAATTTTGGTCCCAGGGGAAAGGAAGAGGCCAGTTGGTCCAGT
++SRR1039512.2 HWI-ST177:314:C12K6ACXX:1:1101:1206:2234 length=63
+HI@EBFGHCGGBGGI@GHGHHGHGIIIIIIGIIIIAHH>BFEEAEDBD?=?AB::AC85@3>A
+@SRR1039512.3 HWI-ST177:314:C12K6ACXX:1:1101:1377:2202 length=63
+ATATTGGCTTTATCTGTACAGGTTCCTTCATCACAAAACCAGTAACTTCCAGTGGATGAAGGC
++SRR1039512.3 HWI-ST177:314:C12K6ACXX:1:1101:1377:2202 length=63
+HJFJJJIIJJJJJJJIIJIIIJIGHIJJIJIJJJIDHIJJJJHIIIJJIJJJHIJJIIIHIH?
+```
+
+These are the 5' ends of the first three fragments. For each fragment, we have four lines: Read ID, sequence, "+" sign, quality string. For details, see the Wikipedia page 
+on the FASTQ format.
+
+
+Building an index
+-----------------
+
+Next, we need to *align* the reads to the genome, i.e., to find for each read where in the genome it maps. For this, we need a tool called an *aligner*. We use the *subread* 
+aligner by Liao et al. ([Nucleic Acids Res., 2013, 41:e108](http://doi.org/10.1093/nar/gkt214)), which you first need to [install](http://bioinf.wehi.edu.au/subread-package/).
+
+Then, as a preparation for installing, we need to download the full DNA sequence of the human genome and ask subread to transform it into an *index*, which it will then use
+as reference to quickly look up sequences when searching for alignments.
+
+We download the genome from the [Ensembl FTP site](https://www.ensembl.org/info/data/ftp/index.html). Go to "DNA (FASTA)" for Homo sapiens; there, download the "DNA primary assembly" FASTA file, then unpack it
+
+```sh
+wget ftp://ftp.ensembl.org/pub/release-94/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
+gunzip dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
+```
+
+As the file name tells you, this is genome "GRCh38", i.e., version 38 of the human genome 
+assembly as provided by the [Genome Reference Consortium (GRC)](https://www.ncbi.nlm.nih.gov/grc). It is important 
+to keep track of the assembly version, or you will mix up gene coordinates.
+
+We let subread build the index
+
+```sh
+subread-buildindex -o GRCh38 Homo_sapiens.GRCh38.dna.primary_assembly.fa
+```
+
+It produces five files, some of them very large, whose names start with `GRCh38`, as specified with `-o`. (This stands for Genome Reference Consortium, human genome, reference assembly version 38 -- which is what we have downloaded.)
+
+
+Aligning the reads
+------------------
+
+To align the reads from a specific run, say, `SRR1039508`, we use a command like
+
+```sh
+subread-align -i GRCh38 -r SRR1039508_1.fastq -R SRR1039508_2.fastq -o SRR1039508.bam -t 0 -T 2
+```
+
+The options used are as follows: `-i` tells the aligner which index to use. We indicate the files we have just produced with `subread-buildindex` by specifying `GRCh38`. Next, we
+give the pair of FASTQ files, first (after `-r`) the first-pass reads, then (after `-R`) the second-pass reads. Then we specify the output file after `-o`, using the extension `bam`. Last, we clarify that these are RNA and not DNA reads (`-t 0`) and that two CPUs should be used in parallel (`-T 2`, use more if you have them).
+
+Again, we can use R produce all 16 commands for us. This ensure that we do not make a mistake and mix up run IDs.
+
+```{r}
+str_c( "subread_align -i GRCh38 -r ", run_table$Run, "_1.fastq -R ", run_table$Run, "_2.fastq -o ", run_table$Run, ".bam -t 0 -T 2\n" ) %>% cat
+```
+
+If you paste them all into your command line, they will be executed one after the other. After a few hours, everything will be aligned.
+
+We can inspect an alignment file with
+
+```sh
+samtools view SRR1039508.bam | less -S
+```
+
+using the [samtools suite](http://www.htslib.org/). Do so and try to understand some of the columns, following
+the [description of the SAM format](https://en.wikipedia.org/wiki/SAM_(file_format)) on Wikipedia.
+
+You can the [Integrated Genome Viewer](http://software.broadinstitute.org/software/igv/) (IGV) to check out 
+the alignments. Do so and observe how the read pairs map to the exons. When using IGV, make sure you choose
+the right genome assembly.
+
+
+# Counting
+
+Next, we want to know, for each BAM file, how many of the reads align to each of the genes. This can be done
+with [featureCount](http://bioinf.wehi.edu.au/featureCounts/) by Liao et al. ([Bioinformatics (2014) 30:923](doi.org/10.1093/bioinformatics/btt656)). This tool is a refinement and a faster replacement for [htseq-count](https://htseq.readthedocs.io/en/release_0.11.1/count.html) (Anders et al., [Bioinformatics (2014) 31:166](https://doi.org/10.1093/bioinformatics/btu638)), which is used in many workflows.
+
+For this, we need a file with gene annotation, i.e., informations about the coordinates where genes, transcripts
+and exons start and end. These can be found for many species in the "Gene sets" column of the [Ensembl download page](https://www.ensembl.org/info/data/ftp/index.html). We use the file [`Homo_sapiens.GRCh38.95.gtf`](ftp://ftp.ensembl.org/pub/release-95/gtf/homo_sapiens/Homo_sapiens.GRCh38.95.gtf.gz),
+which gives the gene annotation from Release 95 of Ensembl, using the coordinates of the GRCh38 genome assembly.
+
+We call `featureCounts` with this command
+
+```sh
+featureCounts -p -T 8 -a Homo_sapiens.GRCh38.94.gtf -o featureCounts.out \
+   SRR1039508.bam SRR1039509.bam SRR1039510.bam SRR1039511.bam SRR1039512.bam \
+   SRR1039513.bam SRR1039514.bam SRR1039515.bam SRR1039516.bam SRR1039517.bam \
+   SRR1039518.bam SRR1039519.bam SRR1039520.bam SRR1039521.bam SRR1039522.bam \
+   SRR1039523.bam
+```
+
+First, the backslashes merely indicate that the command is broken in several lines.
+We use the following options: `-a Homo_sapiens.GRCh38.94.gtf` tells featureCounts
+to use the reference annotation that we have just downloaded. `-o featureCount.out` specifies
+the file name to save the resulting count table. `-p` directs featureCount to count paired reads
+as one cDNA fragment, not as two reads. `-T 8` means to use 8 CPU cores in parallel. (This makes sense
+only if you have as many cores in your computer.) Then, we list all the BAM files for which we want counts.
+A full description can be found in the [Subread package user guide](http://bioinf.wehi.edu.au/subread-package/SubreadUsersGuide.pdf).
+
+After about half an hour, featureCounts finished, and writes out a file with a table of
+counts. We will examine this table in the next lesson.
