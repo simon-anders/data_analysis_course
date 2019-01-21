@@ -262,3 +262,9 @@ and so get a detailed plot to the right:
 
 ![](rlc_oscc.png)
  
+
+Finally, we save the workspace (i.e., all variables), so that we can continue from here next time.
+ 
+```{r}
+save.image( "lecture8.rda" )
+```
