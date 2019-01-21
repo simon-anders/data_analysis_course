@@ -18,7 +18,7 @@ cells in each well with a flourescence-based ATP-sensitive readout.
 We have six files, five CSV from the plate reader, and one Excel file with the
 information on the layout of the drug master plate.
 
-If you want to redo this analysis, you can find the six files here: [lymphoma_data.zip]](lymphoma_data.zip).
+If you want to redo this analysis, you can find the six files here: [lymphoma_data.zip](lymphoma_data.zip).
 
 # Reading in the plate files.
 
@@ -390,4 +390,4 @@ pheatmap( cor( t(responseMatrix) ) )
 
 This correlation heatmap is quite noisy, simply because we have samples from only five patients. However, even now, you would see (if you had the real
 drug names instead of fruit names) that the red squares along the diagonal tend to correspond to drugs with related mode of action. A somewhat larger
-cohort can hence give a surprising amount of details. See, e.g., Figure 3 of [this paper by Dietrich et al.](http:doi.org/10.1172/JCI93801).
+cohort can hence give a surprising amount of details. See, e.g., Figure 3 of [this paper by Dietrich et al.](http:doi.org/10.1172/JCI93801)
