@@ -1,0 +1,101 @@
+---
+title: 'SFB 1036 Course on Data Analysis: Lessons 6+7'
+author: "Simon Anders"
+output:
+  html_document:
+    df_print: paged
+---
+
+# RNA-Seq data processing
+
+This lessons shows how to preprocess RNA-Seq data, and how to do an initial analysis.
+
+## Downloading the example data
+
+Our example data today is from a study on oral squamous cell carcinoma (OSCC) by 
+Conway et al. ([Oncotarget 6:40186](https://doi.org/10.18632/oncotarget.5529), 2015). They performed
+RNA-Seq on samples from 19 patients. From each patient, they had three samples, one of the tumour ("T"), one
+of dysplasia (pre-malignant tissue, "D") and one from healthy oral mucosa ("H"). They submitted their raw 
+sequencing data to the European Nucleotide Archive ([ENA](https://www.ebi.ac.uk/ena)) under accession
+"PRJEB7455".
+
+We first get a sample table from ENA: Open https://www.ebi.ac.uk/ena/data/view/PRJEB7455, and click 
+on "Select columns". We will need the column "Run accession" with the sequencing libraries' accession 
+numbers, the column "FASTQ file (FTP)" with the links to download the FASTQ files, and the "Submitter's sample name".
+We download the table and load it in R
+
+```{r}
+library( tidyverse )
+sampleTable <- read_tsv( "RNASeq/PRJEB7455.txt")
+
+sampleTable
+```
+A close look at the table reveals a mistake in the column `fastq_ftp`: It show contain two files for
+each run (because these are paired-end sequencing runs), one with `_1.fastq` and one with `_2.fastq`. For
+four of the runs, there is a superfluous third file, without `_1` and `_2`. These can be removed with a text editor. Also, we notice that all URLs have the same form, and can be formed from the run accession:
+
+```{r}
+run_acc <- "ERR649018"
+str_c( "ftp://ftp.sra.ebi.ac.uk/vol1/fastq/ERR649/", run_acc, "/", run_acc, "_1.fastq.gz")
+```
+
+A convenient way to download many files is to use the `wget` command on
+the shell command line. (The shell, not R!). We can use R to produce the necessary command:
+
+```{r}
+for( run_acc in sampleTable$run_accession ) {
+   cat( str_c( "wget ftp://ftp.sra.ebi.ac.uk/vol1/fastq/ERR649/", run_acc, "/", run_acc, "_1.fastq.gz\n") )
+   cat( str_c( "wget ftp://ftp.sra.ebi.ac.uk/vol1/fastq/ERR649/", run_acc, "/", run_acc, "_2.fastq.gz\n") )
+}
+```
+Here, we have used `cat`, to simply print the string onto the screen, without any 
+quotation marks or other extras. You have to tell `cat` to break the line at the
+end, by adding `"\n"`. Otherwise all will appear in one long line.
+
+Now, you can copy and paste this into a terminal window and let it run overnight,
+until everything is downloaded. Make sure to have lots of space on your hard disk 
+if you do that: Each file is more than 1 GB. Or just download a few of the files to see
+some examples how they look.
+
+Use the `less` command (again, this is the command line, not R) to inspect a few 
+of the files, and read up about the [FASTQ format](https://en.wikipedia.org/wiki/FASTQ_format) to understand what you are
+looking at. Ths is what you would also get from a core facility.
+
+
+## Aligning the data
+
+Next, we need to align the reads to the human genome reference. We will use the [*Subread* aligner](http://subread.sourceforge.net/) by Liao et al. ([Nucl Acid Res, 41:e108](http://doi.org:10.1093/nar/gkt214), 2013).
+Install it. On Ubuntu Linux, you simply type `sudo apt install subread`. For other other operating systems,
+installation should not be much more difficult.
+
+Now, we need to download the Human genome, e.g. from the [Ensembl download page](http://www.ensembl.org/info/data/ftp/index.html).
+We use the "primary assembly" of GRCh38 (Genome Reference Consortium, human genome, release 38), which you find
+in the "DNA (FASTA)" column: 
+
+ftp://ftp.ensembl.org/pub/release-95/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
+
+Unpack the compressed file
+
+```
+gunzip Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz 
+```
+
+the build the index:
+
+```
+subread-buildindex -M 6000 -o GRCh38.subread_index Homo_sapiens.GRCh38.dna.primary_assembly.fa 
+```
+
+This last command takes a bit more than half an hour on my laptop. My laptop has 8 GB of RAM,
+hence I told Subread with the option `-M 6000` that it can use a good part of it. The index consists 
+of several files, with file names all starting with `GRCh38.subread_index`, as specified with `-o`.
+
+Have a good look at the [Subread User Guide](http://bioinf.wehi.edu.au/subread-package/SubreadUsersGuide.pdf) 
+for more detailed usage instructions.
+
+To align files to the index that we have just constructed we can use, e.g.
+
+```
+subread-align -i GRCh38.subread_index -r ERR649018_1.fastq -R ERR649018_2.fastq -o ERR649018.bam -t 0 -T 8
+```
+
