@@ -10,7 +10,8 @@ We load the saved data from last time
 
 ```{r}
 library( tidyverse )
-read( "lecture8.rda" )
+library( DESeq2 )
+load( "lecture8.rda" )
 ```
    
 # Gene Set Enrichment
@@ -180,6 +181,8 @@ res2 %>%
 We can also redo our interactvie plot
 
 ```{r}
+library( rlc )
+
 openPage( useViewer=FALSE, layout="table2x2" )
 
 lc_scatter(
@@ -207,12 +210,12 @@ lc_scatter(
 )
 ```
 
-How about now using just the genes with LFC > 2 in an GO enrichment analysis?
+How about now using just the genes with LFC > 1.5 in an GO enrichment analysis?
 
 ```{r}
 res2 %>%
    as_tibble( rownames = "EnsemblID" ) %>%
-   filter( log2FoldChange > 2 ) %>%
+   filter( log2FoldChange > 1.5 ) %>%
    pull( "EnsemblID" ) %>%
    enrichGO(
       OrgDb = org.Hs.eg.db,
@@ -229,7 +232,7 @@ How about the hallmark set?
 ```{r}
 res2 %>%
    as_tibble( rownames = "EnsemblID" ) %>%
-   filter( log2FoldChange > 2 ) %>%
+   filter( log2FoldChange > 1.5 ) %>%
    left_join( 
       read_tsv( "RNASeq/airway/mart_export.txt" ),
       by = c( "EnsemblID" = "Gene stable ID" ) ) %>%

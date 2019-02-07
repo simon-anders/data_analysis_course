@@ -1,0 +1,356 @@
+```{r}
+library( tidyverse )
+```
+We load some example data found on the web
+
+```{r}
+medley <- 
+   read_csv( url( "https://raw.githubusercontent.com/aurielfournier/biometry_materials/master/20160225_biometry_lab_6_anova_assumptions/medley.csv" ) )[,1:3]
+colnames(medley) <- str_to_lower( colnames(medley) )   
+
+medley
+```
+
+This is data from Medley and Clement, *Responses of Diatom Communities to heavy 
+metals in streams: the influence of longitudinal variation* (Ecological 
+Applications, [8:631](https://doi.org/10.1890/1051-0761(1998)008[0631:RODCTH]2.0.CO;2) (1998)). 
+I have taken the idea to use this as example from Quinn and Keough's book *Experimental
+design and data analysis for biologists* (Cambridge University Press, 2002).
+
+Medley and Clement have measured, for different sites along five streams, the concentration
+of the zinc and the [Shannon-Wiener diversity](https://en.wikipedia.org/wiki/Diversity_index) of [diatom](https://en.wikipedia.org/wiki/Diatom) species. Do high levels of zinc cause a reduction in
+species diversity?
+
+In order to discuss one-way anova, let's only use one column, the zinc concentration, for now, and
+ignore the stream column.
+
+As a fisrt step, we should plot the data
+
+```{r}
+ggplot( medley ) +
+   geom_point( aes( x = zinc, y = diversity ) )
+```
+
+Let's bring the x axis in the correct order and then try again
+
+```{r}
+medley$zinc <- fct_relevel( medley$zinc, 
+   c( "BACK", "LOW", "MED", "HIGH" ) )
+
+library( ggbeeswarm )
+
+ggplot( medley ) +
+   geom_point( aes( x = zinc, y = diversity ) )
+```
+
+In most papers, however, you will see this
+
+```{r}
+ggplot( medley ) +
+   geom_boxplot( aes( x = zinc, y = diversity ) )
+```
+
+or even this
+
+```{r}
+medley %>%
+   group_by( zinc ) %>%
+   summarise(
+      mean = mean( diversity ),
+      sem = sd( diversity ) / sqrt( n() ) ) %>%
+   rename( diversity = mean ) %>%
+ggplot +
+   geom_bar( aes( x = zinc, y = diversity, width = .7 ), stat="identity" ) +
+   geom_errorbar( aes( x = zinc, ymin = diversity-sem, ymax = diversity+sem ), 
+      width = .3, stat="identity" ) 
+```
+
+Don't hide your data, so don't use barcharts.
+
+Maybe combine boxplots and beeswarm plots:
+
+```{r}
+ggplot( medley, aes( x = zinc, y = diversity ) ) +
+   geom_boxplot( color = "gray40" ) + geom_point()
+```
+
+Back to the original question.
+
+Is there a difference in species diversity between the four groups?
+
+We could make t tests:
+
+```{r}
+t.test( 
+   medley %>% filter( zinc == "BACK" ) %>% pull(diversity),
+   medley %>% filter( zinc == "MED" ) %>% pull(diversity) )
+```
+
+But do we really want to compare each group against every other group? We will only 
+get a multiple testing problem.
+
+Let's make a short detour to see why this is not a good idea.
+
+We have four groups, and, say 30 measurement values, taken completely at random, with
+no connection between measurement values and group. We do all 6 pair-wise comparisons
+with t tests. How often do we get a significant result? Run the following code a 
+couple of times.
+
+```{r}
+tibble(
+   group = sample( c( "A", "B", "C", "D" ), 30, replace=TRUE ),
+   value = rnorm( 30, mean=10, sd=3 ) ) ->
+      simdata
+
+expand( simdata, group1=group, group2 = group ) %>%
+   filter( group1 < group2 ) %>%
+   group_by_all() %>%
+   summarise( pval = t.test( 
+      simdata %>% filter( group == group1 ) %>% pull(value),
+      simdata %>% filter( group == group2 ) %>% pull(value) )$p.value ) %>%
+   mutate( signif = pval < 0.05 )
+
+```
+
+So, multiple pairwise tests are not a good idea. How can we compare all four groups at once?
+
+Sneak preview: We use one-way ANOVA:
+
+```{r}
+anova( lm( diversity ~ zinc, medley ) )
+```
+
+As we can see, there is a signifcant p value. But what do all the other numbers mean?
+
+To understand, let's break down the ANOVA calculation in its piece and to it "on foot".
+
+In *analysis of variance*, or ANOVA, we see how much variance the groups explain. FIrst, a graphical representation of the idea
+
+```{r fig.height=2.5, fig.width=7}
+cowplot::plot_grid( 
+   ggplot( medley ) + geom_jitter( aes( x = "all", y = diversity ), width=.1 ) +
+       ylim(0.2,3.3),
+   ggplot( medley ) + geom_jitter( aes( x = zinc, y = diversity ),  width=.1 ) +   
+       ylim(0.2,3.3),
+   rel_widths = c( 1, 3 ) )
+```
+
+The total variance of our diversity measurements is
+
+```{r}
+var( medley$diversity )
+```
+
+Remember that to get to this number, we calculate the *squared deviations from the mean* and then divide by
+the number of samples (minus 1):
+
+```{r}
+( medley$diversity - mean(medley$diversity) )^2
+
+sum( ( medley$diversity - mean(medley$diversity) )^2 ) / ( nrow(medley) - 1 )
+```
+
+For the moment, let's ignore the denominator and focus on the numerator of the variance, the *sum of squares* (SS or SumSq).
+Here we calculate the sum of squares once more, now without dividing by `( nrow(medley) - 1 )`.
+
+```{r}
+medley %>%
+   summarise( ss = sum( ( diversity - mean(diversity) )^2 ) ) 
+```
+We call this quantity the *total sum of squares* (TSS).
+
+In the TSS, we have subtracted from each value the mean over *all* samples. What happens 
+if we take the mean separately for each of the four groups?
+
+```{r}
+medley %>%
+   group_by( zinc ) %>%
+   summarise( ss = sum( ( diversity - mean(diversity) )^2 ) )
+```
+
+Let's sum this up:
+```{r}
+medley %>%
+   group_by( zinc ) %>%
+   summarise( ss = sum( ( diversity - mean(diversity) )^2 ) ) %>%
+   summarise( ss = sum(ss) )
+```
+
+Now, we get a lower sum of squares! Why? Because the means in the individual groups can be closer to the values
+than the overall mean. This can be because the values scatter around different, groups-specific true means, or simply by
+chance.
+
+First, some terminology: We call this second sum the *residual sum of squares* (RSS), because it is what is left over
+after we make use of our knowledge of the differences in zinc concentyration. The ratio, RSS/TSS, is called the *fraction of
+variance unexplained*. It seems that here, about 72% of the total varaince is not "explained" by the zinc concentration bin
+while 28% of the total variance *is* "explained" by it.
+
+Why the quotation marks? Because even noise can seem to explain something: Let's try the same on our simulation
+data.
+
+First the total sum of squares (TSS):
+
+```{r}
+simdata %>%
+   summarise( ss = sum( ( value - mean(value) )^2 ) )
+```
+
+Now the residual sum of squares (RSS):
+
+```{r}
+simdata %>%
+   group_by( group ) %>%
+   summarise( ss = sum( ( value - mean(value) )^2 ) ) %>%
+   summarise( ss = sum( ss ) )
+```
+
+How do we know what fraction of variance we can expect to see "explained"" by chance?
+For our simulation, we can just run it many times:
+
+```{r}
+replicate( 3000, {
+
+   tibble(
+      group = sample( c( "A", "B", "C", "D" ), 30, replace=TRUE ),
+      value = rnorm( 30, mean=10, sd=3 ) ) ->
+        simdata
+   
+   simdata %>%
+      summarise( ss = sum( ( value - mean(value) )^2 ) ) %>%
+      pull( ss ) -> 
+         tss
+   
+   simdata %>%
+      group_by( group ) %>%
+      summarise( ss = sum( ( value - mean(value) )^2 ) ) %>%
+      summarise( ss = sum( ss ) ) %>%
+      pull( ss ) -> 
+         rss
+   
+   rss/tss
+}) -> frac_unexpl
+
+
+hist( frac_unexpl, 30 )
+```
+Instead of looking at this unexplained fraction of the TSS, it is more common to
+look at the so-called F statistic
+
+```{r}
+Fstat <- ( 1 - frac_unexpl ) / frac_unexpl * 26/3
+```
+
+This is the ratio of explained to unexplained variance. Why the `26/3`? Because we have used
+sum of squares but the F statistic is calculated on variances. So, we need to reintroduce
+the $(N-1)$ denominator -- only that now it is $(N-4)$, because we had $N=30$ values, and subtracted
+$K=4$ means for the $K$ groups instead of the usual 1 mean. This is called the number of *residual degrees of freedom*,
+while $N-1$ is the total number of degrees of freedom, and the differnce between them, $K-1=-3$ is the
+number of degrees of freedom associated with the grouip factor. If this sopunds complicated,
+don't bother -- we need this only for historical reasons, i.e., in order to be able to compare with
+standard tables.
+
+Here is the same histogram, but now for F:
+
+```{r}
+hist( Fstat, 100, freq=FALSE )
+fg <- seq( 0, 10, length.out=100 )
+lines( fg, df( fg, 3, 26 ), col="magenta" )
+```
+
+The point of the F statistic is that there is a formula for its distribution under
+the null hypothesis (i.e., under the assumptions of our null simulation). So, we do not
+actually need to perform the simulation (which takes time, and would have taken way too much
+time before we had fast computers), we can simply look things up.
+
+Coming back to the zinc data: There, our TSS and RSS values are (see above):
+
+```{r}
+medley %>%
+   summarise( ss = sum( ( diversity - mean(diversity) )^2 ) ) %>%
+   pull(ss) ->
+tss   
+
+medley %>%
+   group_by( zinc ) %>%
+   summarise( ss = sum( ( diversity - mean(diversity) )^2 ) ) %>%
+   summarise( ss = sum(ss) ) %>%
+   pull(ss) ->
+rss  
+
+c( tss = tss, rss = rss, unexpl_frac = rss/tss)
+```
+Also, we have $N=34$ samples and $K=4$ groups, and hence $K-1=3$ degrees of freedom associated 
+with the group (zinc) and $N-K=30$ remaining degrees of freedom. Our F value is hence
+
+```{r}
+(tss-rss) / rss * 30/3
+```
+The probability of explaining more variance by chance than what zinc seems to explain here, i.e., of gettin a lower RSS or a higher F value by chance, is, according to the F distribution formula
+
+```{r}
+pf( (tss-rss) / rss * 30/3, 3, 30, lower.tail=FALSE )
+```
+
+All this lengthy computation can be done automatically with a single call to
+the anova function:
+
+```{r}
+anova( lm( diversity ~ zinc, medley ) )
+```
+
+
+Permutation test
+
+```{r}
+medley %>%
+   summarise( ss = sum( ( diversity - mean(diversity) )^2 ) ) %>%
+   pull ->
+     tss
+
+medley %>%
+   group_by( zinc ) %>%
+   summarise( ss = sum( ( diversity - mean(diversity) )^2 ) ) %>%
+   summarise( ss = sum(ss) ) %>%
+   pull ->
+rss
+
+replicate( 1000, {
+   medley %>%
+   mutate( zinc = sample( zinc ) ) %>%
+   group_by( zinc ) %>%
+   summarise( ss = sum( ( diversity - mean(diversity) )^2 ) ) %>%
+   summarise( ss = sum(ss) ) %>%
+   pull } ) -> 
+rss_perm
+
+hist( rss_perm, 30 )
+abline( v = rss, col="green" )
+abline( v = tss, col="purple" )
+```
+
+```{r}
+table( rss_perm < rss)
+```
+
+```{r}
+( sum( rss_perm < rss ) + 1 ) / ( length(rss_perm) + 1 )
+```
+
+Two-way anova
+-------------
+
+So far, we have ignored the "stream" column. Let's plot it:
+
+```{r}
+ggplot( medley ) +
+   geom_point( aes( x = zinc, y = diversity, col = stream ) ) +
+   scale_color_brewer( palette="Set3" )
+```
+
+Here is how a two-way ANOVA looks:
+
+```{r}
+anova( lm( diversity ~ stream + zinc, medley ) )
+```
+
+Details to follow.

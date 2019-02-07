@@ -68,7 +68,14 @@ Lecture 8 [recording](https://www.youtube.com/watch?v=eXUOHSsqP18)
 ### [Lecture 9](lecture9.html): RNA-Seq data analysis: Gene set enrichment etc
 
 [HTML file](lecture9.html)  --  [Rmd file](lecture9.Rmd)
-(preliminary)
+
+[recording](https://youtu.be/ASr-Y-phWfI)
+
+
+### [Lecture 10](lecture10.html): One-way ANOVA
+
+[HTML file](lecture10.html)  --  [Rmd file](lecture10.Rmd)
+[recording](https://www.youtube.com/watch?v=1ovFsYWcSpo)
 
 
 
