@@ -6,6 +6,8 @@ output:
     df_print: paged
 ---
 
+# Gene Set Enrichment Analysis
+
 We load the saved data from last time
 
 ```{r}

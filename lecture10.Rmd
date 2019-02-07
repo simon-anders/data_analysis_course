@@ -1,3 +1,13 @@
+---
+title: 'SFB 1036 Course on Data Analysis: Lesson 10'
+author: "Simon Anders"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Analysis of Variance
+
 ```{r}
 library( tidyverse )
 ```
